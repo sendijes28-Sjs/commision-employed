@@ -2,10 +2,10 @@ import { DollarSign, FileText, AlertCircle, TrendingUp } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const kpiData = [
-  { label: "Total Sales Today", value: "$45,230", icon: DollarSign, color: "text-primary", bg: "bg-primary/10" },
+  { label: "Total Sales Today", value: "Rp 45.230.000", icon: DollarSign, color: "text-primary", bg: "bg-primary/10" },
   { label: "Total Invoices Today", value: "28", icon: FileText, color: "text-success", bg: "bg-success/10" },
   { label: "Pending Invoice Validation", value: "7", icon: AlertCircle, color: "text-warning", bg: "bg-warning/10" },
-  { label: "Total Commission This Month", value: "$8,450", icon: TrendingUp, color: "text-primary", bg: "bg-primary/10" },
+  { label: "Total Commission This Month", value: "Rp 8.450.000", icon: TrendingUp, color: "text-primary", bg: "bg-primary/10" },
 ];
 
 const chartData = [
@@ -19,11 +19,11 @@ const chartData = [
 ];
 
 const invoices = [
-  { number: "INV-2024-001", team: "Lelang", sales: "$5,230", status: "Approved", date: "2024-03-11" },
-  { number: "INV-2024-002", team: "Shopee", sales: "$3,450", status: "Pending", date: "2024-03-11" },
-  { number: "INV-2024-003", team: "Lelang", sales: "$7,890", status: "Approved", date: "2024-03-10" },
-  { number: "INV-2024-004", team: "Shopee", sales: "$2,100", status: "Rejected", date: "2024-03-10" },
-  { number: "INV-2024-005", team: "Lelang", sales: "$4,560", status: "Approved", date: "2024-03-10" },
+  { number: "INV-2024-001", team: "Lelang", sales: "Rp 5.230.000", status: "Approved", date: "2024-03-11" },
+  { number: "INV-2024-002", team: "Shopee", sales: "Rp 3.450.000", status: "Pending", date: "2024-03-11" },
+  { number: "INV-2024-003", team: "Lelang", sales: "Rp 7.890.000", status: "Approved", date: "2024-03-10" },
+  { number: "INV-2024-004", team: "Shopee", sales: "Rp 2.100.000", status: "Rejected", date: "2024-03-10" },
+  { number: "INV-2024-005", team: "Lelang", sales: "Rp 4.560.000", status: "Approved", date: "2024-03-10" },
 ];
 
 export function DashboardPage() {
@@ -91,13 +91,12 @@ export function DashboardPage() {
                   <td className="px-6 py-4">{invoice.sales}</td>
                   <td className="px-6 py-4">
                     <span
-                      className={`inline-flex px-2 py-1 rounded text-sm ${
-                        invoice.status === "Approved"
+                      className={`inline-flex px-2 py-1 rounded text-sm ${invoice.status === "Approved"
                           ? "bg-success/10 text-success"
                           : invoice.status === "Pending"
-                          ? "bg-warning/10 text-warning"
-                          : "bg-destructive/10 text-destructive"
-                      }`}
+                            ? "bg-warning/10 text-warning"
+                            : "bg-destructive/10 text-destructive"
+                        }`}
                     >
                       {invoice.status}
                     </span>

@@ -8,19 +8,24 @@ import {
   Users,
   Settings,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: FileText, label: "Invoices", path: "/invoices" },
-  { icon: CheckSquare, label: "Invoice Validation", path: "/invoice-validation" },
-  { icon: DollarSign, label: "Commission Reports", path: "/commission-reports" },
-  { icon: Tag, label: "Product Price List", path: "/price-list" },
-  { icon: Users, label: "Users Management", path: "/users" },
-  { icon: Settings, label: "Settings", path: "/settings" },
+const allMenuItems = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/", roles: ["super_admin", "admin", "user"] },
+  { icon: FileText, label: "Invoices", path: "/invoices", roles: ["super_admin", "admin", "user"] },
+  { icon: CheckSquare, label: "Invoice Validation", path: "/invoice-validation", roles: ["super_admin", "admin", "user"] },
+  { icon: DollarSign, label: "Commission Reports", path: "/commission-reports", roles: ["super_admin", "admin", "user"] },
+  { icon: Tag, label: "Product Price List", path: "/price-list", roles: ["super_admin", "admin"] },
+  { icon: Users, label: "Users Management", path: "/users", roles: ["super_admin", "admin"] },
+  { icon: Settings, label: "Settings", path: "/settings", roles: ["super_admin", "admin", "user"] },
 ];
 
 export function Sidebar() {
   const location = useLocation();
+  const { user } = useAuth();
+
+  const userRole = user?.role || "user";
+  const menuItems = allMenuItems.filter((item) => item.roles.includes(userRole));
 
   return (
     <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -38,11 +43,10 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                isActive
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent"
-              }`}
+                }`}
             >
               <Icon className="w-5 h-5" />
               <span>{item.label}</span>

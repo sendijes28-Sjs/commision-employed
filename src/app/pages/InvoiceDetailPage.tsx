@@ -1,8 +1,8 @@
+import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router";
-import { ArrowLeft, Printer, AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { ArrowLeft, Printer, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2 } from "lucide-react";
 
-// Mock invoice data — keyed by invoice number
-const invoiceData: Record<string, {
+interface InvoiceDetailType {
   number: string;
   userName: string;
   team: string;
@@ -10,109 +10,64 @@ const invoiceData: Record<string, {
   date: string;
   status: string;
   items: { id: string; product: string; quantity: number; price: number; bottomPrice: number }[];
-}> = {
-  "INV-2024-001": {
-    number: "INV-2024-001",
-    userName: "John Doe",
-    team: "Lelang",
-    customer: "PT Maju Bersama",
-    date: "2024-03-11",
-    status: "Approved",
-    items: [
-      { id: "1", product: "Laptop Asus VivoBook", quantity: 2, price: 1500000, bottomPrice: 1400000 },
-      { id: "2", product: "Mouse Wireless Logitech", quantity: 5, price: 95000, bottomPrice: 100000 },
-      { id: "3", product: "Keyboard Mechanical", quantity: 3, price: 450000, bottomPrice: 400000 },
-    ],
-  },
-  "INV-2024-002": {
-    number: "INV-2024-002",
-    userName: "Jane Smith",
-    team: "Shopee",
-    customer: "CV Sejahtera",
-    date: "2024-03-11",
-    status: "Pending",
-    items: [
-      { id: "1", product: "Headset Gaming JBL", quantity: 4, price: 280000, bottomPrice: 300000 },
-      { id: "2", product: "Webcam HD Logitech", quantity: 2, price: 350000, bottomPrice: 320000 },
-    ],
-  },
-  "INV-2024-003": {
-    number: "INV-2024-003",
-    userName: "Mike Johnson",
-    team: "Lelang",
-    customer: "UD Berkah Jaya",
-    date: "2024-03-10",
-    status: "Approved",
-    items: [
-      { id: "1", product: "Monitor Samsung 24\"", quantity: 3, price: 1800000, bottomPrice: 1700000 },
-      { id: "2", product: "USB Hub 7-Port", quantity: 10, price: 120000, bottomPrice: 110000 },
-      { id: "3", product: "HDMI Cable 2m", quantity: 20, price: 35000, bottomPrice: 30000 },
-      { id: "4", product: "Desk Lamp LED", quantity: 5, price: 85000, bottomPrice: 90000 },
-    ],
-  },
-  "INV-2024-004": {
-    number: "INV-2024-004",
-    userName: "Sarah Williams",
-    team: "Shopee",
-    customer: "PT Surya Abadi",
-    date: "2024-03-10",
-    status: "Rejected",
-    items: [
-      { id: "1", product: "Power Bank 20000mAh", quantity: 6, price: 180000, bottomPrice: 200000 },
-      { id: "2", product: "Charging Cable Type-C", quantity: 15, price: 25000, bottomPrice: 30000 },
-    ],
-  },
-  "INV-2024-005": {
-    number: "INV-2024-005",
-    userName: "John Doe",
-    team: "Lelang",
-    customer: "CV Karya Mandiri",
-    date: "2024-03-10",
-    status: "Approved",
-    items: [
-      { id: "1", product: "SSD 512GB Samsung", quantity: 5, price: 650000, bottomPrice: 600000 },
-      { id: "2", product: "RAM DDR4 8GB", quantity: 4, price: 320000, bottomPrice: 300000 },
-    ],
-  },
-  "INV-2024-006": {
-    number: "INV-2024-006",
-    userName: "Jane Smith",
-    team: "Shopee",
-    customer: "PT Graha Niaga",
-    date: "2024-03-09",
-    status: "Pending",
-    items: [
-      { id: "1", product: "Printer Canon PIXMA", quantity: 2, price: 1200000, bottomPrice: 1100000 },
-      { id: "2", product: "Ink Cartridge Black", quantity: 10, price: 95000, bottomPrice: 100000 },
-      { id: "3", product: "A4 Paper Ream", quantity: 20, price: 48000, bottomPrice: 45000 },
-    ],
-  },
-  "INV-2024-007": {
-    number: "INV-2024-007",
-    userName: "Mike Johnson",
-    team: "Lelang",
-    customer: "UD Prima Lestari",
-    date: "2024-03-09",
-    status: "Approved",
-    items: [
-      { id: "1", product: "Smartphone Samsung A54", quantity: 2, price: 850000, bottomPrice: 800000 },
-      { id: "2", product: "Phone Case Transparent", quantity: 5, price: 35000, bottomPrice: 30000 },
-    ],
-  },
-};
+}
 
 const statusConfig: Record<string, { icon: React.ElementType; label: string; classes: string }> = {
   Approved: { icon: CheckCircle2, label: "Approved", classes: "bg-green-50 text-green-700 border-green-200" },
-  Pending:  { icon: Clock,         label: "Pending",  classes: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  Rejected: { icon: XCircle,       label: "Rejected", classes: "bg-red-50 text-red-700 border-red-200" },
+  Pending: { icon: Clock, label: "Pending", classes: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  Rejected: { icon: XCircle, label: "Rejected", classes: "bg-red-50 text-red-700 border-red-200" },
 };
 
 const formatRupiah = (val: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(val);
 
 export function InvoiceDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const invoice = id ? invoiceData[id] : null;
+  const params = useParams();
+  const id = params["*"] || "";
+  const [invoice, setInvoice] = useState<InvoiceDetailType | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) {
+      setIsLoading(false);
+      return;
+    }
+    fetch(`http://localhost:3001/api/invoice-detail?id=${encodeURIComponent(id)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          setInvoice(null);
+        } else {
+          setInvoice({
+            number: data.invoice_number,
+            userName: data.user_name || "Unknown User",
+            team: data.team,
+            customer: data.customer_name,
+            date: data.date.substring(0, 10),
+            status: data.status.charAt(0).toUpperCase() + data.status.slice(1),
+            items: data.items.map((it: any) => ({
+              id: it.id.toString(),
+              product: it.product_name,
+              quantity: it.quantity,
+              price: it.price,
+              bottomPrice: it.bottom_price
+            }))
+          });
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch invoice details:", err);
+      })
+      .finally(() => setIsLoading(false));
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!invoice) {
     return (
@@ -138,7 +93,7 @@ export function InvoiceDetailPage() {
 
   const subtotals = invoice.items.map((item) => item.quantity * item.price);
   const totalSales = subtotals.reduce((a, b) => a + b, 0);
-  const hasBelowBottomPrice = (item: typeof invoice.items[0]) => item.price < item.bottomPrice;
+  const hasBelowBottomPrice = (item: typeof invoice.items[0]) => item.bottomPrice > 0 && item.price < item.bottomPrice;
 
   return (
     <div className="space-y-6">
@@ -186,9 +141,8 @@ export function InvoiceDetailPage() {
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Sales Team</p>
             <span
-              className={`inline-flex px-2 py-1 rounded text-sm ${
-                invoice.team === "Lelang" ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700"
-              }`}
+              className={`inline-flex px-2 py-1 rounded text-sm ${invoice.team === "Lelang" ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700"
+                }`}
             >
               {invoice.team}
             </span>

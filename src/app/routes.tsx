@@ -23,7 +23,7 @@ export const router = createBrowserRouter([
       { index: true, Component: DashboardPage },
       { path: "invoices", Component: InvoiceListPage },
       { path: "invoices/create", Component: CreateInvoicePage },
-      { path: "invoices/:id", Component: InvoiceDetailPage },
+      { path: "invoices/*", Component: InvoiceDetailPage },
       { path: "invoice-validation", Component: InvoiceValidationPage },
       { path: "commission-reports", Component: CommissionReportPage },
       { path: "price-list", Component: ProductPriceListPage },
