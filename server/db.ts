@@ -52,10 +52,12 @@ db.exec(`
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
 if (userCount.count === 0) {
   const insertUser = db.prepare('INSERT INTO users (name, email, password, team, role) VALUES (?, ?, ?, ?, ?)');
-  insertUser.run('Admin Glory', 'admin@glory.com', 'admin123', 'Management', 'admin');
-  insertUser.run('Herman', 'herman@glory.com', 'herman123', 'Lelang', 'staff');
-  insertUser.run('Asep Kelana', 'asep@glory.com', 'asep123', 'Lelang', 'staff');
-  insertUser.run('Siti Badriah', 'siti@glory.com', 'siti123', 'Shopee', 'staff');
+  insertUser.run('Super Admin', 'superadmin@glory.com', 'admin123', 'IT Division', 'super_admin');
+  insertUser.run('HR Admin', 'hr@glory.com', 'admin123', 'HR', 'admin');
+  insertUser.run('CEO', 'ceo@glory.com', 'admin123', 'CEO', 'admin');
+  insertUser.run('Herman Lelang', 'herman@glory.com', 'herman123', 'Lelang', 'user');
+  insertUser.run('Asep User', 'asep@glory.com', 'asep123', 'User', 'user');
+  insertUser.run('Siti Offline', 'siti@glory.com', 'siti123', 'Offline', 'user');
 }
 
 const productCount = db.prepare('SELECT COUNT(*) as count FROM products').get() as { count: number };
