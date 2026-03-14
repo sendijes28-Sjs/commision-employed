@@ -1,9 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import db from './db.js';
 
 const app = express();
 const port = 3001;
+const JWT_SECRET = 'glory_interior_super_secret_key_123!';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -12,20 +15,109 @@ app.use(express.json({ limit: '10mb' }));
 
 // Get all users
 app.get('/api/users', (req, res) => {
-  const users = db.prepare('SELECT id, name, email, team, role FROM users').all();
+  const users = db.prepare('SELECT id, name, email, team, role, status FROM users').all();
   res.json(users);
 });
 
-// Login
-app.post('/api/login', (req, res) => {
-  const { email, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password) as any;
+// Create User
+app.post('/api/users', async (req, res) => {
+  const { name, email, password, team, role, status } = req.body;
+  
+  if (!name || !email || !password || !team) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
 
-  if (user) {
-    const { password, ...userData } = user;
-    res.json({ token: 'dummy-jwt-token', user: userData });
-  } else {
-    res.status(401).json({ error: 'Invalid email or password' });
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const insertUser = db.prepare('INSERT INTO users (name, email, password, team, role, status) VALUES (?, ?, ?, ?, ?, ?)');
+    const result = insertUser.run(name, email, hashedPassword, team, role || 'user', status || 'Active');
+    res.status(201).json({ success: true, id: result.lastInsertRowid });
+  } catch (error: any) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+    console.error("POST /api/users error:", error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Update User
+app.put('/api/users/:id', async (req, res) => {
+  const userId = req.params.id;
+  const { name, email, team, role, status, password } = req.body;
+
+  try {
+    let updateQuery;
+    let params;
+
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateQuery = db.prepare('UPDATE users SET name = ?, email = ?, team = ?, role = ?, status = ?, password = ? WHERE id = ?');
+      params = [name, email, team, role, status, hashedPassword, userId];
+    } else {
+      updateQuery = db.prepare('UPDATE users SET name = ?, email = ?, team = ?, role = ?, status = ? WHERE id = ?');
+      params = [name, email, team, role, status, userId];
+    }
+
+    const info = updateQuery.run(...params);
+
+    if (info.changes === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+    console.error("PUT /api/users error:", error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Delete (Deactivate) User
+app.delete('/api/users/:id', (req, res) => {
+  const userId = req.params.id;
+  try {
+    const info = db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    if (info.changes === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error("DELETE /api/users error:", error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// Login
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (user.status !== 'Active') {
+      return res.status(403).json({ error: 'Account is inactive via admin' });
+    }
+
+    // Compare Hash
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (isMatch) {
+      const { password, ...userData } = user;
+      const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
+      res.json({ token, user: userData });
+    } else {
+      res.status(401).json({ error: 'Invalid email or password' });
+    }
+  } catch (error) {
+    console.error("Login Error:", error);
+    res.status(500).json({ error: 'Failed to process login' });
   }
 });
 
@@ -48,10 +140,10 @@ app.post('/api/products/import', (req, res) => {
     let skipped = 0;
 
     const findExisting = db.prepare('SELECT id FROM products WHERE name = ?');
-    const updateProduct = db.prepare('UPDATE products SET bottom_price = ? WHERE name = ?');
-    const insertProduct = db.prepare('INSERT INTO products (name, bottom_price) VALUES (?, ?)');
+    const updateProduct = db.prepare('UPDATE products SET bottom_price = ?, sku = ? WHERE name = ?');
+    const insertProduct = db.prepare('INSERT INTO products (sku, name, bottom_price) VALUES (?, ?, ?)');
 
-    const importTransaction = db.transaction((items: { name: string; price: number }[]) => {
+    const importTransaction = db.transaction((items: { sku?: string; name: string; price: number }[]) => {
       for (const item of items) {
         if (!item.name || item.price <= 0) {
           skipped++;
@@ -60,9 +152,9 @@ app.post('/api/products/import', (req, res) => {
 
         const existing = findExisting.get(item.name) as any;
         if (existing) {
-          updateProduct.run(item.price, item.name);
+          updateProduct.run(item.price, item.sku || null, item.name);
         } else {
-          insertProduct.run(item.name, item.price);
+          insertProduct.run(item.sku || null, item.name, item.price);
         }
         imported++;
       }
@@ -92,12 +184,12 @@ app.post('/api/invoices', (req, res) => {
     const invoiceId = result.lastInsertRowid;
 
     const insertItem = db.prepare(`
-      INSERT INTO invoice_items (invoice_id, product_name, quantity, price, subtotal)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO invoice_items (invoice_id, product_name, quantity, price, bottom_price, subtotal)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of items) {
-      insertItem.run(invoiceId, item.productName, item.quantity, item.price, item.quantity * item.price);
+      insertItem.run(invoiceId, item.productName, item.quantity, item.price, item.bottomPrice || 0, item.quantity * item.price);
     }
 
     res.status(201).json({ success: true, id: invoiceId });
@@ -117,8 +209,7 @@ app.get('/api/invoices', (req, res) => {
         EXISTS (
           SELECT 1 
           FROM invoice_items ii
-          JOIN products p ON ii.product_name = p.name
-          WHERE ii.invoice_id = i.id AND ii.price < p.bottom_price AND p.bottom_price > 0
+          WHERE ii.invoice_id = i.id AND ii.price < ii.bottom_price AND ii.bottom_price > 0
         ) as has_warning
       FROM invoices i
       LEFT JOIN users u ON i.user_id = u.id
@@ -153,9 +244,8 @@ app.get('/api/invoice-detail', (req, res) => {
     const items = db.prepare(`
       SELECT 
         ii.id, ii.product_name, ii.quantity, ii.price, ii.subtotal,
-        COALESCE(p.bottom_price, 0) as bottom_price
+        COALESCE(ii.bottom_price, 0) as bottom_price
       FROM invoice_items ii
-      LEFT JOIN products p ON ii.product_name = p.name
       WHERE ii.invoice_id = ?
     `).all(invoice.id);
 

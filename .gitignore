@@ -28,3 +28,11 @@ pnpm-debug.log*
 
 # Vite
 *.local
+
+# Database
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Data
+*.csv

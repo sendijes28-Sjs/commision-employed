@@ -218,12 +218,6 @@ export function InvoiceListPage() {
                         >
                           <Eye className="w-4 h-4 text-muted-foreground group-hover:text-blue-600" />
                         </Link>
-                        <button className="p-1.5 hover:bg-secondary rounded transition-colors group" title="Edit">
-                          <Edit className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
-                        </button>
-                        <button className="p-1.5 hover:bg-red-50 rounded transition-colors group" title="Delete">
-                          <Trash2 className="w-4 h-4 text-muted-foreground group-hover:text-destructive" />
-                        </button>
                       </div>
                     </td>
                   </tr>

@@ -13,11 +13,19 @@ interface User {
   team: string;
 }
 
+interface Product {
+  id: number;
+  sku: string;
+  name: string;
+  bottom_price: number;
+}
+
 const API_URL = "http://localhost:3001/api";
 
 export function CreateInvoicePage() {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +38,7 @@ export function CreateInvoicePage() {
     watch,
     reset,
     formState: { errors },
-  } = useForm<InvoiceFormData>({
+  } = useForm({
     resolver: zodResolver(InvoiceSchema),
     defaultValues: {
       invoiceNumber: "",
@@ -52,10 +60,14 @@ export function CreateInvoicePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const usersRes = await axios.get(`${API_URL}/users`);
+        const [usersRes, productsRes] = await Promise.all([
+          axios.get(`${API_URL}/users`),
+          axios.get(`${API_URL}/products`)
+        ]);
         setUsers(usersRes.data);
+        setProducts(productsRes.data);
       } catch (error) {
-        console.error("Failed to fetch users", error);
+        console.error("Failed to fetch initial data", error);
       }
     };
     fetchData();
@@ -92,24 +104,17 @@ export function CreateInvoicePage() {
       const gloryItems = [
         { 
           id: "g1", 
-          productName: "LIST PLAT GOLD PEREKAT 50M - LIST PLAT GOLD PEREKAT LEBAR 2 CM PANJANG 50 M", 
+          productName: "PVC BOARD MIRROR WARNA SILVER", 
           quantity: 15, 
-          price: 261300, 
-          bottomPrice: 150000 
+          price: 450000, 
+          bottomPrice: products.find(p => p.name === "PVC BOARD MIRROR WARNA SILVER")?.bottom_price || 0 
         },
         { 
           id: "g2", 
-          productName: "LIST PLAT GOLD PEREKAT 50M - LIST PLAT GOLD PEREKAT LEBAR 3 CM PANJANG 50 M", 
+          productName: "WALLBOARD 8 MM 1 DUS ISI 10", 
           quantity: 10, 
-          price: 394400, 
-          bottomPrice: 250000 
-        },
-        { 
-          id: "g3", 
-          productName: "LIST PLATBLACK PEREKAT50M(2CM) - LIST PLAT BLACK PEREKAT LEBAR 2 CM PANJANG 50 M", 
-          quantity: 5, 
-          price: 261300, 
-          bottomPrice: 150000 
+          price: 300000, 
+          bottomPrice: products.find(p => p.name === "WALLBOARD 8 MM 1 DUS ISI 10")?.bottom_price || 0 
         }
       ];
 
@@ -124,14 +129,18 @@ export function CreateInvoicePage() {
   const formatRupiah = (val: number) =>
     new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(val);
 
-  const calculateSubtotal = (quantity: number, price: number) => quantity * price;
+  const calculateSubtotal = (quantity: any, price: any) => (Number(quantity) || 0) * (Number(price) || 0);
 
   const calculateTotal = () =>
     watchedItems.reduce((sum, item) => sum + calculateSubtotal(item.quantity, item.price), 0);
 
-  const isBelowBottomPrice = (item: any) => item.price > 0 && item.price < item.bottomPrice;
+  const isBelowBottomPrice = (item: any) => {
+    const price = Number(item.price);
+    const bottom = Number(item.bottomPrice);
+    return price > 0 && bottom > 0 && price < bottom;
+  };
 
-  const onSubmit = async (data: InvoiceFormData) => {
+  const onSubmit = async (data: any) => {
     setIsSubmitting(true);
     try {
       const payload = {
@@ -140,10 +149,11 @@ export function CreateInvoicePage() {
         total_amount: calculateTotal(),
         invoice_number: data.invoiceNumber,
         customer_name: data.customerName,
-        items: data.items.map(item => ({
+        items: data.items.map((item: any) => ({
           productName: item.productName,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          bottomPrice: item.bottomPrice
         }))
       };
       await axios.post(`${API_URL}/invoices`, payload);
@@ -266,14 +276,16 @@ export function CreateInvoicePage() {
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               <div className="p-6 border-b border-border flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Ordered Items</h2>
-                <button
-                  type="button"
-                  onClick={() => append({ id: Date.now().toString(), productName: "", quantity: 1, price: 0, bottomPrice: 0 })}
-                  className="text-sm bg-primary/10 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/20 transition-all flex items-center gap-1.5 font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add New Line
-                </button>
+                {!uploadSuccess && (
+                  <button
+                    type="button"
+                    onClick={() => append({ id: Date.now().toString(), productName: "", quantity: 1, price: 0, bottomPrice: 0 })}
+                    className="text-sm bg-primary/10 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/20 transition-all flex items-center gap-1.5 font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add New Line
+                  </button>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -289,22 +301,39 @@ export function CreateInvoicePage() {
                   <tbody className="divide-y divide-border">
                     {fields.map((field, index) => {
                       const item = watchedItems[index];
-                      const warning = isBelowBottomPrice(item);
                       return (
-                        <tr key={field.id} className={`${warning ? "bg-yellow-50/50" : ""} hover:bg-secondary/10 transition-colors`}>
+                        <tr key={field.id} className="hover:bg-secondary/10 transition-colors">
                           <td className="px-6 py-4">
-                            <textarea
-                              {...register(`items.${index}.productName`)}
-                              rows={2}
-                              className="w-full text-sm bg-transparent border-none focus:ring-0 p-0 resize-none font-medium"
-                              placeholder="Product Name..."
-                            />
+                            <div className="space-y-2">
+                              <input
+                                {...register(`items.${index}.productName`)}
+                                readOnly={uploadSuccess}
+                                list={`products-list-${index}`}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const matched = products.find(p => p.name === val || p.sku === val);
+                                  if (matched) {
+                                    setValue(`items.${index}.bottomPrice`, matched.bottom_price);
+                                  }
+                                }}
+                                className={`w-full text-sm bg-transparent border-none focus:ring-0 p-0 font-medium ${uploadSuccess ? "cursor-not-allowed opacity-80" : ""}`}
+                                placeholder="Search or type product name..."
+                              />
+                              <datalist id={`products-list-${index}`}>
+                                {products.map(p => (
+                                  <option key={p.id} value={p.name}>
+                                    {p.sku ? `[${p.sku}] ` : ""}{p.name}
+                                  </option>
+                                ))}
+                              </datalist>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <input
                               {...register(`items.${index}.quantity`, { valueAsNumber: true })}
                               type="number"
-                              className="w-full bg-input-background border border-input rounded px-2 py-1 text-sm outline-none"
+                              readOnly={uploadSuccess}
+                              className={`w-full border rounded px-2 py-1 text-sm outline-none ${uploadSuccess ? 'bg-secondary/50 border-transparent text-muted-foreground cursor-not-allowed' : 'bg-input-background border-input'}`}
                             />
                           </td>
                           <td className="px-6 py-4">
@@ -312,27 +341,25 @@ export function CreateInvoicePage() {
                               <input
                                 {...register(`items.${index}.price`, { valueAsNumber: true })}
                                 type="number"
-                                className={`w-full bg-input-background border ${warning ? 'border-yellow-400' : 'border-input'} rounded px-2 py-1 text-sm outline-none`}
+                                readOnly={uploadSuccess}
+                                className={`w-full border rounded px-2 py-1 text-sm outline-none ${uploadSuccess ? 'bg-secondary/50 border-transparent text-muted-foreground cursor-not-allowed' : 'bg-input-background border-input'}`}
                               />
-                              {warning && (
-                                <p className="text-[10px] text-yellow-700 font-bold flex items-center gap-0.5 animate-pulse">
-                                  <AlertTriangle className="w-3 h-3" /> BELOW BOTTOM
-                                </p>
-                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 font-semibold text-sm">
                             {formatRupiah(calculateSubtotal(item.quantity, item.price))}
                           </td>
                           <td className="px-6 py-4">
-                            <button
-                              type="button"
-                              onClick={() => remove(index)}
-                              className="p-1 hover:bg-red-50 rounded text-muted-foreground hover:text-destructive transition-colors disabled:opacity-20"
-                              disabled={fields.length === 1}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {!uploadSuccess && (
+                              <button
+                                type="button"
+                                onClick={() => remove(index)}
+                                className="p-1 hover:bg-red-50 rounded text-muted-foreground hover:text-destructive transition-colors disabled:opacity-20"
+                                disabled={fields.length === 1}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );

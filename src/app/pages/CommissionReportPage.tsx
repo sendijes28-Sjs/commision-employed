@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Download, Calendar, Users, Clock, DollarSign } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import * as XLSX from "xlsx";
 
 interface CommissionEntry {
   invoiceNum: string;
@@ -67,6 +68,49 @@ export function CommissionReportPage() {
     return sum + num;
   }, 0);
 
+  const handleExport = () => {
+    // Prepare data for Excel
+    const exportData = commissions.map(c => {
+      const baseObj = {
+        "Invoice Number": c.invoiceNum,
+        "Customer Name": c.custName,
+      };
+      
+      const adminObj = isUserRole ? {} : {
+        "Sales Team": c.team,
+        "Total Sales": c.sales,
+        "Commission Percentage": c.percentage,
+      };
+
+      return {
+        ...baseObj,
+        ...adminObj,
+        "Commission Amount": c.amount,
+        "Status": c.status,
+        "Date": c.date,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Commissions");
+    
+    // Auto-size columns slightly
+    const colWidths = [
+      { wch: 20 }, // Invoice Num
+      { wch: 30 }, // Customer Name
+      { wch: 15 }, // Sales Team
+      { wch: 20 }, // Total Sales
+      { wch: 15 }, // Percentage
+      { wch: 20 }, // Amount
+      { wch: 15 }, // Status
+      { wch: 15 }, // Date
+    ];
+    worksheet["!cols"] = isUserRole ? colWidths.filter((_, i) => ![2,3,4].includes(i)) : colWidths;
+
+    XLSX.writeFile(workbook, `Commission_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -76,7 +120,10 @@ export function CommissionReportPage() {
             {isUserRole ? "Your personal commission history" : "Track employee commission calculations"}
           </p>
         </div>
-        <button className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
+        <button 
+          onClick={handleExport}
+          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+        >
           <Download className="w-5 h-5" />
           Export to Excel
         </button>

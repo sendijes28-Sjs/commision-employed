@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcrypt';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,11 +17,22 @@ db.exec(`
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     team TEXT NOT NULL,
-    role TEXT DEFAULT 'staff'
+    role TEXT NOT NULL DEFAULT 'user',
+    status TEXT NOT NULL DEFAULT 'Active'
   );
+`);
 
+// Safe migration for existing DBs
+try {
+  db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'Active'");
+} catch (e) {
+  // Column already exists
+}
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sku TEXT,
     name TEXT NOT NULL,
     bottom_price INTEGER NOT NULL
   );
@@ -33,7 +45,7 @@ db.exec(`
     user_id INTEGER,
     team TEXT NOT NULL,
     total_amount INTEGER NOT NULL,
-    status TEXT DEFAULT 'Pending',
+    status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Approved', 'Rejected')),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
@@ -43,29 +55,34 @@ db.exec(`
     product_name TEXT NOT NULL,
     quantity INTEGER NOT NULL,
     price INTEGER NOT NULL,
+    bottom_price INTEGER DEFAULT 0,
     subtotal INTEGER NOT NULL,
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
   );
-`);
+`
+);
 
-// Seed dummy data if empty
-const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-if (userCount.count === 0) {
-  const insertUser = db.prepare('INSERT INTO users (name, email, password, team, role) VALUES (?, ?, ?, ?, ?)');
-  insertUser.run('Super Admin', 'superadmin@glory.com', 'admin123', 'IT Division', 'super_admin');
-  insertUser.run('HR Admin', 'hr@glory.com', 'admin123', 'HR', 'admin');
-  insertUser.run('CEO', 'ceo@glory.com', 'admin123', 'CEO', 'admin');
-  insertUser.run('Herman Lelang', 'herman@glory.com', 'herman123', 'Lelang', 'user');
-  insertUser.run('Asep User', 'asep@glory.com', 'asep123', 'User', 'user');
-  insertUser.run('Siti Offline', 'siti@glory.com', 'siti123', 'Offline', 'user');
+// Safe migration for invoice_items bottom_price
+try {
+  db.exec("ALTER TABLE invoice_items ADD COLUMN bottom_price INTEGER DEFAULT 0");
+} catch (e) {
+  // Column already exists
 }
 
-const productCount = db.prepare('SELECT COUNT(*) as count FROM products').get() as { count: number };
-if (productCount.count === 0) {
-  const insertProduct = db.prepare('INSERT INTO products (name, bottom_price) VALUES (?, ?)');
-  insertProduct.run('LIST PLAT GOLD PEREKAT 50M - 2 CM', 150000);
-  insertProduct.run('LIST PLAT GOLD PEREKAT 50M - 3 CM', 250000);
-  insertProduct.run('LIST PLATBLACK PEREKAT50M(2CM)', 150000);
+// Safe migration for products sku
+try {
+  db.exec("ALTER TABLE products ADD COLUMN sku TEXT");
+} catch (e) {
+  // Column already exists
+}
+
+// Seed initial Super Admin if empty to allow first login
+const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+if (userCount.count === 0) {
+  const adminHash = bcrypt.hashSync('admin123', 10);
+  const insertUser = db.prepare('INSERT INTO users (name, email, password, team, role, status) VALUES (?, ?, ?, ?, ?, ?)');
+  insertUser.run('Super Admin', 'superadmin@glory.com', adminHash, 'IT Division', 'super_admin', 'Active');
+  console.log('Initial Super Admin created: superadmin@glory.com / admin123');
 }
 
 export default db;
