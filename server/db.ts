@@ -59,8 +59,29 @@ db.exec(`
     subtotal INTEGER NOT NULL,
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
   );
-`
-);
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`);
+
+// Seed default settings
+const seedSettings = [
+  { key: 'lelang_commission', value: '5.0' },
+  { key: 'user_commission', value: '4.5' },
+  { key: 'offline_commission', value: '4.0' },
+  { key: 'default_commission', value: '3.0' }
+];
+
+const checkSetting = db.prepare('SELECT 1 FROM settings WHERE key = ?');
+const insertSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
+
+seedSettings.forEach(s => {
+  if (!checkSetting.get(s.key)) {
+    insertSetting.run(s.key, s.value);
+  }
+});
 
 // Safe migration for invoice_items bottom_price
 try {
