@@ -33,6 +33,12 @@ pnpm-debug.log*
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+*.db
 
 # Data
 *.csv
+*.json
+*.jpg
+*.jpeg
+*.png
+*.traineddata

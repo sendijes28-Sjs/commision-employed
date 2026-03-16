@@ -3,15 +3,70 @@ import cors from 'cors';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import db from './db.js';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = 3001;
 const JWT_SECRET = 'glory_interior_super_secret_key_123!';
 
+// Configure Multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, 'uploads/'));
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ storage });
+
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // API Endpoints
+
+// OCR Scan via Python
+app.post('/api/ocr/scan', upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const filePath = req.file.path;
+  const pythonProcess = spawn('python', [path.join(__dirname, 'parser.py'), filePath]);
+
+  let resultData = '';
+  let errorData = '';
+
+  pythonProcess.stdout.on('data', (data) => {
+    resultData += data.toString();
+  });
+
+  pythonProcess.stderr.on('data', (data) => {
+    errorData += data.toString();
+  });
+
+  pythonProcess.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`Python script error (code ${code}):`, errorData);
+      return res.status(500).json({ error: 'OCR processing failed', details: errorData });
+    }
+
+    try {
+      const jsonResult = JSON.parse(resultData);
+      res.json(jsonResult);
+    } catch (e) {
+      console.error('Failed to parse Python output:', resultData);
+      res.status(500).json({ error: 'Invalid response from OCR parser' });
+    }
+  });
+});
 
 // Get all users
 app.get('/api/users', (req, res) => {
@@ -296,6 +351,40 @@ app.get('/api/stats', (req, res) => {
     GROUP BY status
   `).all();
   res.json(stats);
+});
+
+// Get Settings
+app.get('/api/settings', (req, res) => {
+  try {
+    const settings = db.prepare('SELECT * FROM settings').all();
+    const formatted = (settings as any[]).reduce((acc, curr) => {
+      acc[curr.key] = curr.value;
+      return acc;
+    }, {});
+    res.json(formatted);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Update Settings
+app.post('/api/settings', (req, res) => {
+  const settings = req.body;
+  
+  try {
+    const updateSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+    const transaction = db.transaction((data) => {
+      for (const [key, value] of Object.entries(data)) {
+        updateSetting.run(key, String(value));
+      }
+    });
+
+    transaction(settings);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Settings Update Error:", error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
 });
 
 app.listen(port, () => {
