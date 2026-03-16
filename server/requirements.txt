@@ -1,6 +1,0 @@
-opencv-python
-pytesseract
-pdf2image
-requests
-numpy
-pillow
