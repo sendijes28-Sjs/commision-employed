@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Upload, Edit, Trash2, Search, FileText, CheckCircle2, AlertTriangle, X, Database, ListFilter, ArrowUpDown, ChevronRight, Hash, Box, Package, Activity, Loader2, Sparkles, Layers } from "lucide-react";
+import { Plus, Upload, Edit, Trash2, Search, FileText, CheckCircle2, AlertTriangle, X, Database, ListFilter, ArrowUpDown, ChevronRight, Hash, Box, Package, Activity, Loader2, Sparkles, Layers, Save } from "lucide-react";
 import axios from "axios";
+import { toast } from "sonner";
+import { PageHeader } from "../components/PageHeader";
 
 interface Product {
   id: number;
   sku: string;
   name: string;
   bottomPrice: string;
+  rawPrice: number;
   lastUpdated: string;
 }
 
@@ -26,21 +29,35 @@ interface MappingFields {
   qtyCol?: number;
 }
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = `http://${window.location.hostname}:4000/api`;
 
 function parsePrice(raw: string): number {
   if (!raw || typeof raw !== "string") return 0;
-  let cleaned = raw.replace(/Rp/gi, "").replace(/\s/g, "");
+  // Clean all characters except numbers, comma, and dot
+  let cleaned = raw.replace(/[^0-9.,]/g, "");
+  if (!cleaned) return 0;
+
+  // In IDR, decimal separators are rare and usually just clutter
+  // If we have "1.500,00", we want "1500"
+  // If we have "1.500", we want "1500"
+  // If we have "1,500,000", we want "1500000"
+  
   const segments = cleaned.split(/[.,]/);
-  if (segments.length === 1) return parseInt(cleaned, 10) || 0;
-  const lastSegment = segments[segments.length - 1];
-  if (lastSegment.length <= 2) {
-    const integerPart = segments.slice(0, -1).join("");
-    return parseInt(integerPart, 10) || 0;
-  } else {
-    const fullNumber = segments.join("");
-    return parseInt(fullNumber, 10) || 0;
+  
+  if (segments.length === 1) {
+    return parseInt(cleaned, 10) || 0;
   }
+
+  const lastSegment = segments[segments.length - 1];
+  
+  // If last segment is exactly 2 digits, it's highly likely a decimal (cents/perak)
+  // in which case we ignore it for IDR pricing.
+  if (lastSegment.length <= 2 && segments.length > 1) {
+    return parseInt(segments.slice(0, -1).join(""), 10) || 0;
+  }
+
+  // Otherwise, treat all segments as part of the whole number (thousands)
+  return parseInt(segments.join(""), 10) || 0;
 }
 
 function formatPrice(num: number): string {
@@ -48,10 +65,17 @@ function formatPrice(num: number): string {
 }
 
 function parseCSV(text: string): string[][] {
+  // Auto-detect delimiter: comma or semicolon
+  const firstLine = text.split('\n')[0] || '';
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semiCount = (firstLine.match(/;/g) || []).length;
+  const delimiter = semiCount > commaCount ? ';' : ',';
+
   const rows: string[][] = [];
   let current = "";
   let inQuotes = false;
   let row: string[] = [];
+  
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     const next = text[i + 1];
@@ -61,7 +85,7 @@ function parseCSV(text: string): string[][] {
       else current += ch;
     } else {
       if (ch === '"') inQuotes = true;
-      else if (ch === ",") { row.push(current.trim()); current = ""; }
+      else if (ch === delimiter) { row.push(current.trim()); current = ""; }
       else if (ch === "\n" || (ch === "\r" && next === "\n")) {
         row.push(current.trim()); current = ""; rows.push(row); row = [];
         if (ch === "\r") i++;
@@ -82,6 +106,12 @@ export function ProductPriceListPage() {
   const [headerIndex, setHeaderIndex] = useState(0);
   const [mapping, setMapping] = useState<MappingFields>({ skuCol: -1, nameCol: -1, priceCol: -1, qtyCol: -1 });
 
+  // Product CRUD Modal
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productForm, setProductForm] = useState({ sku: "", name: "", bottom_price: "" });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = async () => {
@@ -92,6 +122,7 @@ export function ProductPriceListPage() {
         sku: p.sku || "",
         name: p.name,
         bottomPrice: formatPrice(p.bottom_price),
+        rawPrice: p.bottom_price || 0,
         lastUpdated: new Date().toISOString().split("T")[0],
       }));
       setProducts(formatted);
@@ -136,6 +167,59 @@ export function ProductPriceListPage() {
 
   const [showImportDetail, setShowImportDetail] = useState(false);
 
+  const openProductModal = (product?: Product) => {
+    if (product) {
+      setEditingProduct(product);
+      setProductForm({ sku: product.sku, name: product.name, bottom_price: String(product.rawPrice) });
+    } else {
+      setEditingProduct(null);
+      setProductForm({ sku: "", name: "", bottom_price: "" });
+    }
+    setShowProductModal(true);
+  };
+
+  const handleSaveProduct = async () => {
+    if (!productForm.name.trim()) return toast.error("Nama barang wajib diisi");
+    try {
+      if (editingProduct) {
+        await axios.put(`${API_URL}/products/${editingProduct.id}`, {
+          sku: productForm.sku || null,
+          name: productForm.name.trim(),
+          bottom_price: parseInt(productForm.bottom_price) || 0,
+        });
+        toast.success("Produk berhasil diperbarui");
+      } else {
+        await axios.post(`${API_URL}/products`, {
+          sku: productForm.sku || null,
+          name: productForm.name.trim(),
+          bottom_price: parseInt(productForm.bottom_price) || 0,
+        });
+        toast.success("Produk berhasil ditambahkan");
+      }
+      setShowProductModal(false);
+      fetchProducts();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Gagal menyimpan produk");
+    }
+  };
+
+  const confirmDeleteProduct = (product: Product) => {
+    setProductToDelete(product);
+  };
+
+  const executeDeleteProduct = async () => {
+    if (!productToDelete) return;
+    try {
+      await axios.delete(`${API_URL}/products/${productToDelete.id}`);
+      toast.success("Produk berhasil dihapus");
+      setProductToDelete(null);
+      fetchProducts();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Gagal menghapus produk");
+      setProductToDelete(null);
+    }
+  };
+
   const processImport = async () => {
     setIsImporting(true);
     setShowMapping(false);
@@ -168,35 +252,29 @@ export function ProductPriceListPage() {
 
   return (
     <div className="space-y-8 pb-12 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-slate-900 text-white rounded-xl flex items-center justify-center shadow-md shadow-slate-200">
-            <Database className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tighter text-slate-900 leading-none">
-              Products
-            </h1>
-            <p className="text-slate-400 mt-1.5 font-semibold text-xs italic opacity-70">
-              Manage product SKU and bottom prices
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
-          <button 
-             onClick={() => fileInputRef.current?.click()}
-             className="px-5 py-2 bg-white border border-slate-200 rounded-lg font-semibold uppercase tracking-widest text-[9px] hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm italic"
-          >
-             <Upload className="w-3.5 h-3.5 text-primary" />
-             Import CSV
-          </button>
-          <button className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary/90 transition-all shadow-sm flex items-center gap-2 font-semibold uppercase tracking-widest text-[9px] active:scale-95 italic text-center">
-             <Plus className="w-3.5 h-3.5" />
-             Add Product
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Products"
+        subtitle="Manage product SKU and bottom prices"
+        actions={
+          <>
+            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+            <button 
+               onClick={() => fileInputRef.current?.click()}
+               className="px-4 py-2 bg-white border border-slate-200 rounded-lg font-medium text-sm text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
+            >
+               <Upload className="w-4 h-4 text-primary" />
+               Import
+            </button>
+            <button 
+               onClick={() => openProductModal()}
+               className="bg-primary text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-primary/90 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+            >
+               <Plus className="w-4 h-4" />
+               Add Product
+            </button>
+          </>
+        }
+      />
 
       {importResult && (
         <div className={`rounded-xl border overflow-hidden shadow-sm ${importResult.success ? 'bg-white border-slate-200' : 'bg-rose-600 border-rose-500 text-white'}`}>
@@ -207,8 +285,8 @@ export function ProductPriceListPage() {
                     {importResult.success ? <Sparkles className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
                  </div>
                  <div>
-                    <p className="font-semibold uppercase tracking-widest text-[7px] mb-0.5 opacity-60 italic">Import Report</p>
-                    <p className="text-base font-semibold tracking-tighter italic">
+                    <p className="font-semibold uppercase tracking-wide text-[7px] mb-0.5 opacity-60">Import Report</p>
+                    <p className="text-base font-semibold tracking-tight">
                        {importResult.success ? `Berhasil import ${importResult.imported} produk` : importResult.errors[0]}
                     </p>
                  </div>
@@ -217,7 +295,7 @@ export function ProductPriceListPage() {
                 {importResult.success && (
                   <button 
                     onClick={() => setShowImportDetail(!showImportDetail)} 
-                    className="px-3 py-1.5 bg-white/20 rounded-lg text-[8px] font-semibold uppercase tracking-widest hover:bg-white/30 transition-all italic"
+                    className="px-3 py-1.5 bg-white/20 rounded-lg text-xs font-semibold uppercase tracking-wide hover:bg-white/30 transition-all"
                   >
                     {showImportDetail ? 'Tutup Detail' : 'Lihat Detail'}
                   </button>
@@ -238,15 +316,15 @@ export function ProductPriceListPage() {
                  <AlertTriangle className="w-4 h-4 text-amber-600" />
                </div>
                <div className="flex-1 min-w-0">
-                 <p className="text-[10px] font-semibold text-amber-800 italic">
-                   ⚠ {importResult.missingPrice.length} produk tanpa bottom price (di-set Rp 0)
+                 <p className="text-sm font-semibold text-amber-800">
+                   {importResult.missingPrice.length} produk tanpa bottom price (di-set Rp 0)
                  </p>
-                 <p className="text-[8px] text-amber-600 font-medium mt-0.5 italic opacity-70">
+                 <p className="text-xs text-amber-600 font-medium mt-0.5 opacity-70">
                    Silakan update harga produk berikut agar sistem bisa menghitung komisi dengan benar.
                  </p>
                  <div className="mt-2 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
                    {importResult.missingPrice.map((name, i) => (
-                     <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-semibold rounded border border-amber-200 italic truncate max-w-[200px]">
+                     <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded border border-amber-200 truncate max-w-[200px]">
                        {name}
                      </span>
                    ))}
@@ -260,18 +338,18 @@ export function ProductPriceListPage() {
              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-6 bg-slate-50/50">
                <div className="flex items-center gap-2">
                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                 <span className="text-[9px] font-semibold text-slate-600 italic">{importResult.imported} berhasil diimport</span>
+                 <span className="text-sm font-semibold text-slate-600">{importResult.imported} berhasil diimport</span>
                </div>
                {importResult.skipped > 0 && (
                  <div className="flex items-center gap-2">
                    <X className="w-3.5 h-3.5 text-slate-400" />
-                   <span className="text-[9px] font-semibold text-slate-400 italic">{importResult.skipped} dilewati</span>
+                   <span className="text-sm font-semibold text-slate-400">{importResult.skipped} dilewati</span>
                  </div>
                )}
                {importResult.missingPrice.length > 0 && (
                  <div className="flex items-center gap-2">
                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                   <span className="text-[9px] font-semibold text-amber-600 italic">{importResult.missingPrice.length} tanpa harga</span>
+                   <span className="text-sm font-semibold text-amber-600">{importResult.missingPrice.length} tanpa harga</span>
                  </div>
                )}
              </div>
@@ -280,22 +358,22 @@ export function ProductPriceListPage() {
            {/* Expandable Detail */}
            {importResult.success && showImportDetail && (
              <div className="px-4 py-3 max-h-60 overflow-y-auto bg-white">
-               <p className="text-[7px] font-semibold text-slate-400 uppercase tracking-widest mb-2 italic opacity-50">Daftar Produk Diimport</p>
+               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 opacity-50">Daftar Produk Diimport</p>
                <div className="space-y-1">
                  {importResult.importedItems.map((name, i) => {
                    const isMissing = importResult.missingPrice.includes(name);
                    return (
-                     <div key={i} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[9px] font-semibold ${isMissing ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-slate-50 text-slate-600'}`}>
+                     <div key={i} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm font-semibold ${isMissing ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-slate-50 text-slate-600'}`}>
                        <span className="flex-shrink-0">
                          {isMissing ? <AlertTriangle className="w-3 h-3 text-amber-500" /> : <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
                        </span>
-                       <span className="truncate italic">{name}</span>
-                       {isMissing && <span className="ml-auto text-[7px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest flex-shrink-0">No Price</span>}
+                       <span className="truncate">{name}</span>
+                       {isMissing && <span className="ml-auto text-xs bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide flex-shrink-0">No Price</span>}
                      </div>
                    );
                  })}
                  {importResult.imported > importResult.importedItems.length && (
-                   <p className="text-[8px] text-slate-400 italic font-semibold text-center py-2">
+                   <p className="text-xs text-slate-400 font-semibold text-center py-2">
                      ... dan {importResult.imported - importResult.importedItems.length} produk lainnya
                    </p>
                  )}
@@ -314,11 +392,11 @@ export function ProductPriceListPage() {
                 placeholder="Search products..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:border-primary transition-all font-semibold text-[10px] shadow-sm italic"
+                className="w-full pl-10 pr-4 py-2 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:border-primary transition-all font-medium text-sm shadow-sm"
               />
            </div>
            <div className="flex items-center gap-2">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-[8px] font-semibold uppercase tracking-widest text-slate-400 hover:text-primary transition-colors italic opacity-70">
+              <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-primary transition-colors opacity-70">
                  <ArrowUpDown className="w-3 h-3" />
                  Last Updated
               </button>
@@ -332,18 +410,18 @@ export function ProductPriceListPage() {
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr className="bg-slate-50/50">
-                <th className="px-5 py-3 text-left text-[8px] text-slate-400 font-semibold uppercase tracking-widest italic opacity-70">Kode Barang</th>
-                <th className="px-5 py-3 text-left text-[8px] text-slate-400 font-semibold uppercase tracking-widest italic opacity-70">Nama Barang</th>
-                <th className="px-5 py-3 text-left text-[8px] text-slate-400 font-semibold uppercase tracking-widest italic opacity-70">Harga Bawah</th>
-                <th className="px-5 py-3 text-left text-[8px] text-slate-400 font-semibold uppercase tracking-widest italic opacity-70">Sync</th>
-                <th className="px-5 py-3 text-center text-[8px] text-slate-400 font-semibold uppercase tracking-widest italic opacity-70">-</th>
+                <th className="px-5 py-3 text-left text-xs text-slate-400 font-semibold uppercase tracking-wide opacity-70">Kode Barang</th>
+                <th className="px-5 py-3 text-left text-xs text-slate-400 font-semibold uppercase tracking-wide opacity-70">Nama Barang</th>
+                <th className="px-5 py-3 text-left text-xs text-slate-400 font-semibold uppercase tracking-wide opacity-70">Harga Bawah</th>
+                <th className="px-5 py-3 text-left text-xs text-slate-400 font-semibold uppercase tracking-wide opacity-70">Sync</th>
+                <th className="px-5 py-3 text-center text-xs text-slate-400 font-semibold uppercase tracking-wide opacity-70">-</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredProducts.map((product) => (
                 <tr key={product.id} className="group hover:bg-slate-50/30 transition-all">
                   <td className="px-5 py-3">
-                    <span className="text-[10px] font-semibold bg-slate-900 text-white px-2 py-1 rounded tracking-widest group-hover:bg-primary transition-colors">
+                    <span className="text-sm font-semibold bg-slate-900 text-white px-2 py-1 rounded tracking-wide group-hover:bg-primary transition-colors">
                        {product.sku}
                     </span>
                   </td>
@@ -353,27 +431,27 @@ export function ProductPriceListPage() {
                           <Package className="w-4 h-4" />
                        </div>
                        <div>
-                          <p className="text-[11px] font-semibold text-slate-800 leading-none">{product.name}</p>
-                          <p className="text-[7px] font-semibold text-slate-400 uppercase tracking-widest mt-0.5 italic opacity-50">Verified</p>
+                          <p className="text-sm font-semibold text-slate-800 leading-none">{product.name}</p>
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-1 opacity-50">Verified</p>
                        </div>
                     </div>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-[11px] font-semibold text-primary tracking-tighter">{product.bottomPrice}</span>
+                    <span className="text-sm font-semibold text-primary tracking-tight">{product.bottomPrice}</span>
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5">
                        <Activity className="w-2.5 h-2.5 text-emerald-500" />
-                       <p className="text-[9px] font-semibold text-slate-400 italic opacity-50">{product.lastUpdated}</p>
+                       <p className="text-xs font-semibold text-slate-400 opacity-50">{product.lastUpdated}</p>
                     </div>
                   </td>
                   <td className="px-5 py-3 text-center">
                     <div className="flex items-center justify-center gap-1.5">
-                       <button className="w-8 h-8 hover:bg-slate-100 rounded text-slate-300 hover:text-slate-900 transition-all flex items-center justify-center">
-                          <Edit className="w-3.5 h-3.5" />
+                       <button onClick={() => openProductModal(product)} className="w-8 h-8 hover:bg-slate-100 rounded text-slate-300 hover:text-slate-900 transition-all flex items-center justify-center">
+                          <Edit className="w-4 h-4" />
                        </button>
-                       <button className="w-8 h-8 hover:bg-rose-50 rounded text-slate-300 hover:text-rose-500 transition-all flex items-center justify-center">
-                          <Trash2 className="w-3.5 h-3.5" />
+                       <button onClick={() => confirmDeleteProduct(product)} className="w-8 h-8 hover:bg-rose-50 rounded text-slate-300 hover:text-rose-500 transition-all flex items-center justify-center">
+                          <Trash2 className="w-4 h-4" />
                        </button>
                     </div>
                   </td>
@@ -394,7 +472,7 @@ export function ProductPriceListPage() {
                  </div>
                  <div>
                     <h2 className="text-lg font-semibold text-slate-900 tracking-tight leading-none">Import Mapping</h2>
-                    <p className="text-[8px] font-semibold text-slate-400 uppercase tracking-widest mt-1 italic opacity-50">Map CSV columns</p>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-1 opacity-50">Map CSV columns</p>
                  </div>
               </div>
               <button 
@@ -408,57 +486,57 @@ export function ProductPriceListPage() {
              <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                    <div className="space-y-1">
-                      <label className="text-[8px] font-semibold uppercase tracking-widest text-slate-400 ml-1 italic opacity-50">SKU Field</label>
+                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 ml-1 opacity-50">SKU Field</label>
                       <div className="relative">
                          <select 
                            value={mapping.skuCol}
                            onChange={(e) => setMapping({ ...mapping, skuCol: parseInt(e.target.value) })}
-                           className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-[10px] outline-none transition-all appearance-none shadow-sm italic"
+                           className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium text-sm outline-none transition-all appearance-none shadow-sm"
                          >
                             <option value={-1}>IGNORE</option>
                             {csvRows[headerIndex]?.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
                          </select>
-                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 rotate-90 text-slate-300 pointer-events-none" />
+                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rotate-90 text-slate-300 pointer-events-none" />
                       </div>
                    </div>
                    <div className="space-y-1">
-                      <label className="text-[8px] font-semibold uppercase tracking-widest text-primary ml-1 italic opacity-70">Name Field *</label>
+                      <label className="text-xs font-semibold uppercase tracking-wide text-primary ml-1 opacity-70">Name Field *</label>
                       <div className="relative">
                          <select 
                            value={mapping.nameCol}
                            onChange={(e) => setMapping({ ...mapping, nameCol: parseInt(e.target.value) })}
-                           className="w-full px-4 py-2 bg-white border border-primary/30 rounded-lg font-semibold text-[10px] outline-none transition-all appearance-none shadow-sm text-primary italic"
+                           className="w-full px-4 py-2 bg-white border border-primary/30 rounded-lg font-medium text-sm outline-none transition-all appearance-none shadow-sm text-primary"
                          >
                             <option value={-1}>SELECT</option>
                             {csvRows[headerIndex]?.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
                          </select>
-                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 rotate-90 text-primary/40 pointer-events-none" />
+                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rotate-90 text-primary/40 pointer-events-none" />
                       </div>
                    </div>
                    <div className="space-y-1">
-                      <label className="text-[8px] font-semibold uppercase tracking-widest text-primary ml-1 italic opacity-70">Price Field *</label>
+                      <label className="text-xs font-semibold uppercase tracking-wide text-primary ml-1 opacity-70">Price Field *</label>
                       <div className="relative">
                          <select 
                            value={mapping.priceCol}
                            onChange={(e) => setMapping({ ...mapping, priceCol: parseInt(e.target.value) })}
-                           className="w-full px-4 py-2 bg-white border border-primary/30 rounded-lg font-semibold text-[10px] outline-none transition-all appearance-none shadow-sm text-primary italic"
+                           className="w-full px-4 py-2 bg-white border border-primary/30 rounded-lg font-medium text-sm outline-none transition-all appearance-none shadow-sm text-primary"
                          >
                             <option value={-1}>SELECT</option>
                             {csvRows[headerIndex]?.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
                          </select>
-                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 rotate-90 text-primary/40 pointer-events-none" />
+                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rotate-90 text-primary/40 pointer-events-none" />
                       </div>
                    </div>
                 </div>
 
                 <div className="bg-slate-900 rounded-xl p-4 relative overflow-hidden">
-                   <h3 className="text-[8px] font-semibold uppercase tracking-widest text-white/30 mb-4 flex items-center gap-2 italic">
-                      <Box className="w-3 h-3 text-primary" /> PREVIEW
+                   <h3 className="text-xs font-semibold uppercase tracking-wide text-white/30 mb-4 flex items-center gap-2">
+                      <Box className="w-4 h-4 text-primary" /> PREVIEW
                    </h3>
                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-[9px] border-separate border-spacing-y-1">
+                      <table className="w-full text-left text-sm border-separate border-spacing-y-1">
                          <thead>
-                            <tr className="text-white/20 uppercase tracking-widest font-semibold italic">
+                            <tr className="text-white/20 uppercase tracking-wide font-semibold">
                                {csvRows[headerIndex]?.slice(0, 5).map((h, i) => (
                                   <th key={i} className="pb-1 px-3">{h || `Column ${i+1}`}</th>
                                ))}
@@ -468,7 +546,7 @@ export function ProductPriceListPage() {
                             {csvRows.slice(headerIndex + 1, headerIndex + 5).map((row, r) => (
                                <tr key={r} className="bg-white/5 rounded">
                                   {row.slice(0, 5).map((c, i) => (
-                                     <td key={i} className="py-2 px-3 font-semibold text-white/60 max-w-[100px] truncate italic opacity-70">{c}</td>
+                                     <td key={i} className="py-2 px-3 font-medium text-white/60 max-w-[100px] truncate opacity-70">{c}</td>
                                   ))}
                                </tr>
                             ))}
@@ -481,20 +559,113 @@ export function ProductPriceListPage() {
              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
                <button 
                  onClick={() => setShowMapping(false)}
-                 className="px-4 py-2 font-semibold uppercase tracking-widest text-[8px] text-slate-400 hover:text-slate-900 transition-colors italic"
+                 className="px-4 py-2 font-semibold uppercase tracking-wide text-xs text-slate-400 hover:text-slate-900 transition-colors"
                >
                  Cancel
                </button>
                <button 
                  onClick={processImport}
                  disabled={mapping.nameCol === -1 || mapping.priceCol === -1 || isImporting}
-                 className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold uppercase tracking-widest text-[9px] shadow-sm hover:bg-primary/90 transition-all disabled:opacity-30 flex items-center gap-2 active:scale-95 italic text-center"
+                 className="bg-primary text-white px-6 py-2.5 rounded-lg font-medium text-sm shadow-sm hover:bg-primary/90 transition-all flex items-center gap-2 active:scale-95 text-center"
                >
-                 {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                 {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                  Import Products
                </button>
              </div>
           </div>
+        </div>
+      )}
+
+      {/* Product Add/Edit Modal */}
+      {showProductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-200">
+            <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-slate-900 text-white rounded-lg flex items-center justify-center shadow-sm">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 tracking-tight leading-none">{editingProduct ? 'Edit Produk' : 'Tambah Produk'}</h2>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-1 opacity-50">Manage product data</p>
+                </div>
+              </div>
+              <button onClick={() => setShowProductModal(false)} className="w-8 h-8 bg-white border border-slate-100 rounded-lg flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all shadow-sm">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 ml-1 opacity-70">Kode Barang / SKU</label>
+                <input
+                  type="text"
+                  value={productForm.sku}
+                  onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })}
+                  placeholder="Opsional"
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg font-medium text-sm outline-none focus:border-primary transition-all shadow-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-primary ml-1 opacity-70">Nama Barang *</label>
+                <input
+                  type="text"
+                  value={productForm.name}
+                  onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                  placeholder="Nama produk"
+                  className="w-full px-4 py-2 bg-white border border-primary/30 rounded-lg font-medium text-sm outline-none focus:border-primary transition-all shadow-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-primary ml-1 opacity-70">Harga Bawah (Rp) *</label>
+                <input
+                  type="number"
+                  value={productForm.bottom_price}
+                  onChange={(e) => setProductForm({ ...productForm, bottom_price: e.target.value })}
+                  placeholder="0"
+                  className="w-full px-4 py-2 bg-white border border-primary/30 rounded-lg font-medium text-sm outline-none focus:border-primary transition-all shadow-sm"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button onClick={() => setShowProductModal(false)} className="px-4 py-2 font-semibold uppercase tracking-wide text-xs text-slate-400 hover:text-slate-900 transition-colors">Cancel</button>
+              <button
+                onClick={handleSaveProduct}
+                className="bg-primary text-white px-6 py-2.5 rounded-lg font-medium text-sm shadow-sm hover:bg-primary/90 transition-all flex items-center gap-2 active:scale-95 text-center"
+              >
+                <Save className="w-4 h-4" />
+                {editingProduct ? 'Simpan' : 'Tambah'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-md">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 overflow-hidden animate-in zoom-in-95 duration-300">
+             <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-4 mx-auto">
+               <AlertTriangle className="w-6 h-6" />
+             </div>
+             <h3 className="text-lg font-semibold text-center text-slate-900 mb-2">Hapus Produk?</h3>
+             <p className="text-sm text-slate-500 text-center mb-6">
+               Yakin ingin menghapus produk "{productToDelete.name}"?
+             </p>
+             <div className="flex items-center gap-3">
+               <button 
+                 onClick={() => setProductToDelete(null)}
+                 className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+               >
+                 Batal
+               </button>
+               <button 
+                 onClick={executeDeleteProduct}
+                 className="flex-1 px-4 py-2 bg-rose-600 text-white hover:bg-rose-700 rounded-lg text-sm font-medium transition-colors shadow-sm"
+               >
+                 Hapus
+               </button>
+             </div>
+           </div>
         </div>
       )}
     </div>

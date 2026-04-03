@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
+import { PageHeader } from "../components/PageHeader";
+import { StatusBadge } from "../components/StatusBadge";
 import { Link } from "react-router";
-import { Plus, Search, Eye, Filter, Calendar, Users, ChevronRight, FileText, MoreHorizontal, ArrowUpRight, CheckCircle2, Clock, XCircle, Hash, Briefcase } from "lucide-react";
+import { Plus, Search, Eye, FileText, ChevronRight, Loader2, Trash2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
+import { toast } from "sonner";
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = `http://${window.location.hostname}:4000/api`;
 
 interface Invoice {
   id: number;
@@ -13,6 +16,7 @@ interface Invoice {
   team: string;
   customer: string;
   sales: string;
+  salesRaw: number;
   status: string;
   date: string;
   userId: number;
@@ -25,20 +29,28 @@ export function InvoiceListPage() {
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("All Teams");
   const [statusFilter, setStatusFilter] = useState("All Status");
-  
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
+
+  // Delete confirmation modal
+  const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
 
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
-        const res = await axios.get(`${API_URL}/invoices`);
-        const formatted: Invoice[] = res.data.map((inv: any) => ({
+        const res = await axios.get(`${API_URL}/invoices?limit=9999`);
+        const rawInvoices = res.data?.data || res.data || [];
+        const formatted: Invoice[] = rawInvoices.map((inv: any) => ({
           id: inv.id,
           number: inv.invoice_number,
           userName: inv.user_name || "Unknown User",
           team: inv.team,
           customer: inv.customer_name,
+          salesRaw: Number(inv.total_amount) || 0,
           sales: "Rp " + (Number(inv.total_amount) || 0).toLocaleString("id-ID"),
           status: inv.status || "Pending",
           date: inv.date?.substring(0, 10) || "",
@@ -54,6 +66,17 @@ export function InvoiceListPage() {
     fetchInvoices();
   }, []);
 
+  const deleteInvoice = async (id: number, number: string) => {
+    try {
+      await axios.delete(`${API_URL}/invoices/${id}`);
+      setInvoices(prev => prev.filter(inv => inv.id !== id));
+      toast.success(`Invoice #${number} deleted`);
+      setDeleteTarget(null);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to delete invoice");
+    }
+  };
+
   const baseInvoices = isUserRole
     ? invoices.filter((inv) => String(inv.userId) === String(user?.id))
     : invoices;
@@ -66,188 +89,157 @@ export function InvoiceListPage() {
     return matchSearch && matchTeam && matchStatus;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, teamFilter, statusFilter]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedInvoices = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+
   return (
-    <div className="space-y-10 pb-20 max-w-7xl mx-auto">
-      {/* Ultra Premium Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+    <div className="space-y-5 pb-10 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-tight flex items-center gap-4">
-            <span className="bg-slate-900 text-white p-3 rounded-[1.5rem] shadow-2xl shadow-slate-200">
-              <FileText className="w-10 h-10" />
-            </span>
-            Registry Vault
-          </h1>
-          <p className="text-muted-foreground mt-3 font-medium italic">
-            {isUserRole ? "Archive of your personal transaction history" : "Enterprise-wide ledger of all certified transactions"}
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Invoices</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {isUserRole ? "Your transaction history" : "Manage and track all invoices"}
           </p>
         </div>
         <Link
           to="/invoices/create"
-          className="bg-primary text-white pl-8 pr-10 py-5 rounded-[2rem] hover:scale-[1.03] active:scale-95 transition-all shadow-2xl shadow-primary/20 flex items-center gap-4 font-black uppercase tracking-[0.2em] text-xs"
+          className="bg-primary text-white px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-all text-xs font-semibold active:scale-[0.98] shadow-sm flex items-center gap-2"
         >
-          <Plus className="w-5 h-5" />
-          Capture New Records
+          <Plus className="w-4 h-4" />
+          Create Invoice
         </Link>
       </div>
 
-      {/* Advanced Command Center (Filters) */}
-      <div className="bg-white rounded-[3rem] p-6 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col lg:flex-row gap-6">
+      {/* Search & Filters */}
+      <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm flex flex-col lg:flex-row gap-3">
         <div className="flex-1 relative group">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-slate-300 group-focus-within:text-primary transition-colors" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-primary transition-colors" />
           <input
             type="text"
-            placeholder="Query serial identification or client entity..."
+            placeholder="Search by invoice # or customer..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-16 pr-6 py-5 bg-slate-50 border border-transparent rounded-[2rem] outline-none focus:bg-white focus:border-slate-200 transition-all font-black text-sm"
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-primary focus:bg-white transition-all text-sm"
           />
         </div>
-        
-        <div className="flex flex-wrap items-center gap-4">
-          {!isUserRole && (
-            <div className="relative">
-              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
-                 <Briefcase className="w-4 h-4" />
-              </div>
-              <select
-                value={teamFilter}
-                onChange={(e) => setTeamFilter(e.target.value)}
-                className="pl-12 pr-12 py-5 bg-slate-50 border border-transparent rounded-[2rem] outline-none focus:bg-white focus:border-slate-200 transition-all font-black text-xs appearance-none min-w-[180px] uppercase tracking-widest text-slate-500"
-              >
-                <option>All Teams</option>
-                <option>Lelang</option>
-                <option>User</option>
-                <option>Offline</option>
-              </select>
-            </div>
-          )}
-          
-          <div className="relative">
-            <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
-               <Hash className="w-4 h-4" />
-            </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="pl-12 pr-12 py-5 bg-slate-50 border border-transparent rounded-[2rem] outline-none focus:bg-white focus:border-slate-200 transition-all font-black text-xs appearance-none min-w-[180px] uppercase tracking-widest text-slate-500"
-            >
-              <option>All Status</option>
-              <option>Approved</option>
-              <option>Pending</option>
-              <option>Rejected</option>
-            </select>
-          </div>
 
-          <div className="h-10 w-[1px] bg-slate-100 mx-2 hidden lg:block" />
-          
-          <button className="w-14 h-14 bg-slate-50 rounded-[1.5rem] flex items-center justify-center text-slate-400 hover:text-primary hover:bg-white transition-all border border-transparent hover:border-slate-200 shadow-sm">
-            <Calendar className="w-6 h-6" />
-          </button>
+        <div className="flex items-center gap-2">
+          {!isUserRole && (
+            <select
+              value={teamFilter}
+              onChange={(e) => setTeamFilter(e.target.value)}
+              className="px-3 py-2.5 bg-white border border-slate-200 rounded-lg outline-none text-xs font-medium text-slate-600 shadow-sm"
+            >
+              <option>All Teams</option>
+              <option>Lelang</option>
+              <option>User</option>
+              <option>Offline</option>
+            </select>
+          )}
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2.5 bg-white border border-slate-200 rounded-lg outline-none text-xs font-medium text-slate-600 shadow-sm"
+          >
+            <option>All Status</option>
+            <option>Approved</option>
+            <option>Pending</option>
+            <option>Rejected</option>
+          </select>
         </div>
       </div>
 
-      {/* Main Ledger Architecture */}
-      <div className="bg-white rounded-[3.5rem] border border-slate-100 shadow-2xl shadow-slate-200/40 overflow-hidden">
+      {/* Invoice Table */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0">
+          <table className="w-full">
             <thead>
-              <tr className="bg-slate-50/50">
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Vault ID</th>
+              <tr className="bg-slate-50/80 border-b border-slate-100">
+                <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Invoice #</th>
                 {!isUserRole && (
-                  <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Personnel Assignment</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">User</th>
                 )}
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Entity Identity</th>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Valuation</th>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Security State</th>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Timestamp</th>
-                <th className="px-10 py-8 text-center text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">-</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Customer</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Amount</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Status</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Date</th>
+                <th className="px-5 py-3 text-center text-xs font-medium text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                   <td colSpan={10} className="px-10 py-32 text-center">
-                      <div className="relative w-16 h-16 mx-auto mb-6">
-                         <div className="absolute inset-0 border-4 border-primary/10 rounded-full" />
-                         <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                      </div>
-                      <p className="text-slate-400 font-black uppercase tracking-widest text-xs animate-pulse">Synchronizing Ledger Streams...</p>
-                   </td>
+                  <td colSpan={10} className="px-10 py-20 text-center">
+                    <Loader2 className="w-7 h-7 animate-spin mx-auto text-primary" />
+                    <p className="text-xs text-slate-400 mt-3">Loading invoices...</p>
+                  </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : paginatedInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-10 py-32 text-center text-slate-400">
-                    <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-                       <FileText className="w-10 h-10 opacity-20" />
-                    </div>
-                    <p className="font-black text-2xl tracking-tighter text-slate-900">Zero Matches Found</p>
-                    <p className="text-sm font-medium mt-2">The vault does not contain records for this specific query.</p>
+                  <td colSpan={10} className="px-10 py-20 text-center">
+                    <FileText className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                    <p className="text-base font-semibold text-slate-900">No records found</p>
+                    <p className="text-xs text-slate-400 mt-1">Try adjusting your search or filters</p>
+                    <Link to="/invoices/create" className="inline-flex items-center gap-1.5 mt-4 text-xs font-semibold text-primary hover:underline">
+                      <Plus className="w-3.5 h-3.5" /> Create first invoice
+                    </Link>
                   </td>
                 </tr>
               ) : (
-                filtered.map((invoice) => (
-                  <tr key={invoice.id} className="group hover:bg-slate-50/50 transition-all">
-                    <td className="px-10 py-8">
-                       <span className="text-sm font-black text-slate-900 group-hover:text-primary transition-colors flex items-center gap-2">
-                          <Hash className="w-3 h-3 opacity-20" />
-                          {invoice.number}
-                       </span>
+                paginatedInvoices.map((invoice) => (
+                  <tr key={invoice.id} className="group hover:bg-slate-50/50 transition-colors">
+                    <td className="px-5 py-3.5">
+                      <span className="text-sm font-semibold text-slate-900">#{invoice.number}</span>
                     </td>
                     {!isUserRole && (
-                      <td className="px-10 py-8">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-[1.25rem] bg-slate-900 text-white flex items-center justify-center font-black text-[10px] shadow-xl shadow-slate-200">
-                             {invoice.userName.split(" ").map(n => n[0]).join("")}
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[9px] font-bold">
+                            {invoice.userName.split(" ").map(n => n[0]).join("")}
                           </div>
                           <div>
-                             <p className="text-sm font-black text-slate-900 leading-none mb-1.5">{invoice.userName}</p>
-                             <div className="flex items-center gap-2">
-                                <div className={`w-1.5 h-1.5 rounded-full ${
-                                  invoice.team === "Lelang" ? "bg-blue-500" : 
-                                  invoice.team === "User" ? "bg-orange-500" : "bg-purple-500"
-                                }`} />
-                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{invoice.team}</span>
-                             </div>
+                            <p className="text-sm font-medium text-slate-900 leading-none">{invoice.userName}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{invoice.team}</p>
                           </div>
                         </div>
                       </td>
                     )}
-                    <td className="px-10 py-8">
-                       <p className="text-sm font-bold text-slate-600 truncate max-w-[180px]">{invoice.customer}</p>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm text-slate-600 truncate max-w-[180px]">{invoice.customer}</p>
                     </td>
-                    <td className="px-10 py-8">
-                       <p className="text-sm font-black text-primary tracking-tight">{invoice.sales}</p>
-                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Market Extended</p>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm font-semibold text-slate-900 font-mono">{invoice.sales}</p>
                     </td>
-                    <td className="px-10 py-8">
-                      <div className="flex">
-                        <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-xl flex items-center gap-2 border ${
-                          invoice.status.toLowerCase() === "approved" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                          invoice.status.toLowerCase() === "pending" ? "bg-orange-50 text-orange-600 border-orange-100" : "bg-rose-50 text-rose-600 border-rose-100"
-                        }`}>
-                          <div className={`w-1.5 h-1.5 rounded-full ${
-                            invoice.status.toLowerCase() === 'approved' ? 'bg-emerald-500' :
-                            invoice.status.toLowerCase() === 'pending' ? 'bg-orange-500' : 'bg-rose-500'
-                          }`} />
-                          {invoice.status}
-                        </span>
-                      </div>
+                    <td className="px-5 py-3.5">
+                      <StatusBadge status={invoice.status} />
                     </td>
-                    <td className="px-10 py-8">
-                       <span className="text-xs font-black text-slate-400">{invoice.date}</span>
+                    <td className="px-5 py-3.5">
+                      <span className="text-xs text-slate-400">{invoice.date}</span>
                     </td>
-                    <td className="px-10 py-8 text-center">
-                      <div className="flex items-center justify-center gap-3">
+                    <td className="px-5 py-3.5 text-center">
+                      <div className="flex items-center justify-center gap-1">
                         <Link
                           to={`/invoices/${invoice.number}`}
-                          className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 hover:text-primary hover:bg-white hover:shadow-xl transition-all border border-transparent hover:border-slate-100 group/btn"
-                          title="Inspect Transcript"
+                          className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 hover:text-primary hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100"
                         >
-                          <ArrowUpRight className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
+                          <Eye className="w-3.5 h-3.5" />
                         </Link>
-                        <button className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-slate-900 transition-colors">
-                           <MoreHorizontal className="w-5 h-5" />
-                        </button>
+                        {!isUserRole && invoice.status.toLowerCase() === 'pending' && (
+                          <button
+                            onClick={() => setDeleteTarget(invoice)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -257,36 +249,84 @@ export function InvoiceListPage() {
           </table>
         </div>
 
-        <div className="px-10 py-8 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-6">
-           <div className="flex items-center gap-3">
-             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-               INTEGRITY CHECK PASSED · {filtered.length} OF {baseInvoices.length} RECORDS
-             </p>
-           </div>
-           <div className="flex items-center gap-2">
-              <button 
-                disabled 
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-300 disabled:opacity-40"
-              >
-                 <ChevronRight className="w-4 h-4 rotate-180" />
-              </button>
-              <div className="flex items-center gap-1">
-                 {[1].map(p => (
-                   <button key={p} className={`w-10 h-10 rounded-xl font-black text-xs ${p === 1 ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-400 hover:bg-white transition-all'}`}>
-                      {p}
-                   </button>
-                 ))}
-              </div>
-              <button 
-                disabled 
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-300 disabled:opacity-40"
-              >
-                 <ChevronRight className="w-4 h-4" />
-              </button>
-           </div>
+        {/* Pagination */}
+        <div className="px-5 py-3 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-xs text-slate-400">
+            Showing {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}–{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-primary hover:border-primary disabled:opacity-40 transition-all cursor-pointer"
+            >
+              <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+            </button>
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              let page: number;
+              if (totalPages <= 5) {
+                page = i + 1;
+              } else if (currentPage <= 3) {
+                page = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                page = totalPages - 4 + i;
+              } else {
+                page = currentPage - 2 + i;
+              }
+              return (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all cursor-pointer ${page === currentPage ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-white border border-transparent hover:border-slate-200'}`}
+                >
+                  {page}
+                </button>
+              );
+            })}
+            {totalPages === 0 && (
+              <button className="w-8 h-8 rounded-lg text-xs font-semibold bg-slate-900 text-white cursor-default">1</button>
+            )}
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-primary hover:border-primary disabled:opacity-40 transition-all cursor-pointer"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal (replaces window.confirm) */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-100 w-full max-w-sm overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-5 h-5 text-rose-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-1">Delete Invoice</h3>
+              <p className="text-sm text-slate-500">
+                Are you sure you want to delete <span className="font-semibold text-slate-700">#{deleteTarget.number}</span>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteInvoice(deleteTarget.id, deleteTarget.number)}
+                className="flex-1 py-2.5 text-sm font-medium text-white bg-rose-500 rounded-lg hover:bg-rose-600 transition-all active:scale-[0.98]"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,13 +7,17 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import dotenv from 'dotenv';
+import crypto from 'crypto';
+
+dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env') });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 3001;
-const JWT_SECRET = 'glory_interior_super_secret_key_123!';
+const port = Number(process.env.PORT) || 4000;
+const JWT_SECRET = process.env.JWT_SECRET || 'glory_interior_super_secret_key_123!';
 import fs from 'fs';
 
 const logToFile = (msg: string) => {
@@ -47,11 +51,14 @@ const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) return res.status(401).json({ error: 'Missing token' });
+  if (!token) {
+    logToFile(`AUTH FAIL: Missing token for ${req.method} ${req.url}`);
+    return res.status(401).json({ error: 'Missing token' });
+  }
 
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) {
-      console.error("JWT Verify Error:", err.message);
+      logToFile(`AUTH FAIL: Invalid token for ${req.method} ${req.url} - ${err.message}`);
       return res.status(403).json({ error: 'Invalid token' });
     }
     req.user = user;
@@ -61,68 +68,63 @@ const authenticateToken = (req: any, res: any, next: any) => {
 
 // API Endpoints
 
-// OCR Scan via Python
-// Helper for strict string similarity (Levenshtein distance based)
-function getSimilarity(s1: string, s2: string): number {
-  const len1 = s1.length;
-  const len2 = s2.length;
-  const matrix: number[][] = [];
+// ── Utility: Hash files for caching ──────────────────────────────
+function hashFiles(filePaths: string[]): string {
+  const hash = crypto.createHash('md5');
+  for (const fp of filePaths) {
+    hash.update(fs.readFileSync(fp));
+  }
+  return hash.digest('hex');
+}
 
-  for (let i = 0; i <= len1; i++) matrix[i] = [i];
-  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
-
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,
-        matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost
-      );
+// ── OCR cache maintenance: cleanup entries older than 30 days ────
+function cleanupOcrCache() {
+  try {
+    const deleted = db.prepare(
+      "DELETE FROM ocr_cache WHERE created_at < datetime('now', '-30 days')"
+    ).run();
+    if (deleted.changes > 0) {
+      logToFile(`[CACHE] Cleaned ${deleted.changes} expired entries`);
     }
-  }
-  const distance = matrix[len1][len2];
-  return 1 - distance / Math.max(len1, len2);
+  } catch (e) { /* ignore */ }
 }
+// Run cleanup on startup and every 24h
+cleanupOcrCache();
+setInterval(cleanupOcrCache, 24 * 60 * 60 * 1000);
 
-function compareDates(d1: string, d2: string): boolean {
-  if (!d1 || !d2) return false;
-  const clean = (s: string) => s.replace(/[^0-9]/g, '');
-  return clean(d1) === clean(d2) || d1.includes(d2) || d2.includes(d1);
-}
-
-// Advanced item matching for OCR vs Official Records
-function isNameMatch(official: string, scanned: string): boolean {
-  if (!official || !scanned) return false;
-  const s1 = official.toLowerCase().trim();
-  const s2 = scanned.toLowerCase().trim();
-  
-  // 1. Exact Match
-  if (s1 === s2) return true;
-  
-  // 2. Substring Match (Case Insensitive) - Min 3 chars to avoid false positives
-  if (s1.length >= 3 && (s2.includes(s1) || s1.includes(s2))) return true;
-  
-  // 3. Smart Split Match (handle delimiters like " - ", "/", "(", ")")
-  const parts = s2.split(/[\-\/\(\)]/).map(p => p.trim()).filter(p => p.length >= 3);
-  for (const part of parts) {
-    if (getSimilarity(s1, part) >= 0.90) return true;
-    if (part.includes(s1) || s1.includes(part)) return true;
-  }
-  
-  // 4. Fuzzy Match (Allow more tolerance for OCR typos)
-  if (getSimilarity(s1, s2) >= 0.90) return true;
-  
-  return false;
-}
-
-app.post('/api/ocr/scan', upload.array('files'), (req, res) => {
+app.post('/api/ocr/scan', authenticateToken, upload.array('files'), (req: any, res: any) => {
   const files = req.files as Express.Multer.File[];
   if (!files || files.length === 0) {
     return res.status(400).json({ error: 'No files uploaded' });
   }
 
   const filePaths = files.map(f => f.path);
+  const cleanupFiles = () => filePaths.forEach(fp => { try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch {} });
+
+  // ── Step 1: Hash files ──
+  let fileHash: string;
+  try {
+    fileHash = hashFiles(filePaths);
+  } catch (e) {
+    cleanupFiles();
+    return res.status(500).json({ error: 'Failed to hash uploaded files' });
+  }
+
+  // ── Step 2: Check cache ──
+  const cached = db.prepare(
+    'SELECT result_json FROM ocr_cache WHERE file_hash = ?'
+  ).get(fileHash) as any;
+
+  if (cached) {
+    db.prepare('UPDATE ocr_cache SET hit_count = hit_count + 1 WHERE file_hash = ?').run(fileHash);
+    cleanupFiles();
+    logToFile(`[CACHE HIT] Hash: ${fileHash.substring(0, 12)}...`);
+    return res.json(JSON.parse(cached.result_json));
+  }
+
+  // ── Step 3: Cache MISS — invoke Python parser ──
+  logToFile(`[CACHE MISS] Hash: ${fileHash.substring(0, 12)}... — calling AI`);
+
   const pythonProcess = spawn('python', [path.join(__dirname, 'parser.py'), ...filePaths]);
 
   let resultData = '';
@@ -137,28 +139,40 @@ app.post('/api/ocr/scan', upload.array('files'), (req, res) => {
   });
 
   pythonProcess.on('error', (err) => {
-    console.error('Failed to start subprocess:', err);
+    cleanupFiles();
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Failed to start OCR subprocess', detail: err.message });
+      res.status(500).json({ error: 'Failed to start OCR subprocess' });
     }
   });
 
   pythonProcess.on('close', (code) => {
+    cleanupFiles();
     if (res.headersSent) return;
     
     if (code !== 0) {
-      console.error('Python OCR process failed:', errorData);
-      return res.status(500).json({ error: 'OCR processing failed', detail: errorData });
+      logToFile(`Python OCR failed: ${errorData}`);
+      return res.status(500).json({ error: 'OCR processing failed' });
     }
 
     try {
-      if (!resultData) {
-        throw new Error('No data received from OCR parser');
-      }
+      if (!resultData) throw new Error('No data received from OCR parser');
       const data = JSON.parse(resultData);
+
+      // ── Step 4: Store in cache (only successful results) ──
+      if (!data.error) {
+        try {
+          db.prepare(
+            'INSERT OR REPLACE INTO ocr_cache (file_hash, result_json) VALUES (?, ?)'
+          ).run(fileHash, resultData);
+          logToFile(`[CACHE STORE] Hash: ${fileHash.substring(0, 12)}...`);
+        } catch (cacheErr) {
+          logToFile(`[CACHE ERROR] Failed to store: ${cacheErr}`);
+        }
+      }
+
       res.json(data);
     } catch (e) {
-      console.error('Failed to parse Python output:', resultData);
+      logToFile(`Failed to parse Python output: ${resultData.substring(0, 200)}`);
       res.status(500).json({ error: 'Invalid response from OCR parser' });
     }
   });
@@ -268,6 +282,29 @@ app.delete('/api/users/:id', authenticateToken, (req: any, res: any) => {
   }
 });
 
+// Toggle User Status (Safe - only updates status field)
+app.patch('/api/users/:id/status', authenticateToken, (req: any, res: any) => {
+  const userId = req.params.id;
+  const { status } = req.body;
+
+  if (!status || !['Active', 'Inactive'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status. Must be Active or Inactive.' });
+  }
+
+  const targetUser = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as any;
+  if (!targetUser) return res.status(404).json({ error: 'User not found' });
+  if (targetUser.role === 'super_admin' && req.user.role === 'admin') {
+    return res.status(403).json({ error: 'Admins cannot modify Super Admin accounts' });
+  }
+
+  try {
+    db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, userId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update status: ' + error.message });
+  }
+});
+
 // Import Master Ledger (Ground Truth for Validation)
 app.post('/api/master-ledger/import', authenticateToken, (req: any, res: any) => {
   if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
@@ -326,8 +363,11 @@ app.post('/api/products/import', authenticateToken, (req: any, res: any) => {
     const importedItems: string[] = [];
     const skippedItems: string[] = [];
 
-    const findExisting = db.prepare('SELECT id FROM products WHERE name = ?');
-    const updateProduct = db.prepare('UPDATE products SET bottom_price = ?, sku = ? WHERE name = ?');
+    // Use SKU as primary key for lookup (each SKU is unique even if names are shared)
+    const findBySku = db.prepare('SELECT id, bottom_price FROM products WHERE sku = ?');
+    const findByName = db.prepare('SELECT id, bottom_price FROM products WHERE name = ? AND (sku IS NULL OR sku = ?)');
+    const updateProductBySku = db.prepare('UPDATE products SET bottom_price = ?, name = ? WHERE sku = ?');
+    const updateProductById = db.prepare('UPDATE products SET bottom_price = ?, sku = ? WHERE id = ?');
     const insertProduct = db.prepare('INSERT INTO products (sku, name, bottom_price) VALUES (?, ?, ?)');
 
     const importTransaction = db.transaction((items: { sku?: string; name: string; price: number }[]) => {
@@ -338,18 +378,35 @@ app.post('/api/products/import', authenticateToken, (req: any, res: any) => {
         }
 
         const price = item.price || 0;
-        const existing = findExisting.get(item.name) as any;
+        const sku = item.sku?.trim() || null;
+        let existing: any = null;
+
+        // Priority 1: Match by SKU (unique per product variant)
+        if (sku) {
+          existing = findBySku.get(sku);
+        }
+        // Priority 2: Match by name only if no SKU provided or SKU not found
+        if (!existing && !sku) {
+          existing = findByName.get(item.name, '');
+        }
+
         if (existing) {
-          updateProduct.run(price, item.sku || null, item.name);
+          if (price > 0) {
+            if (sku) {
+              updateProductBySku.run(price, item.name, sku);
+            } else {
+              updateProductById.run(price, sku, existing.id);
+            }
+          }
         } else {
-          insertProduct.run(item.sku || null, item.name, price);
+          insertProduct.run(sku, item.name, price);
         }
 
         if (price <= 0) {
           missingPrice.push(item.name);
         }
 
-        importedItems.push(item.name);
+        importedItems.push(sku ? `${sku} - ${item.name}` : item.name);
         imported++;
       }
     });
@@ -368,6 +425,53 @@ app.post('/api/products/import', authenticateToken, (req: any, res: any) => {
     logToFile(`Product import error: ${error.message}\n${error.stack}`);
     console.error("Product import error:", error);
     res.status(500).json({ error: 'Failed to import products: ' + error.message });
+  }
+});
+
+// Create single product
+app.post('/api/products', authenticateToken, (req: any, res: any) => {
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  const { sku, name, bottom_price } = req.body;
+  if (!name || name.trim() === '') return res.status(400).json({ error: 'Product name is required' });
+
+  try {
+    const result = db.prepare('INSERT INTO products (sku, name, bottom_price) VALUES (?, ?, ?)').run(sku || null, name.trim(), bottom_price || 0);
+    res.status(201).json({ success: true, id: result.lastInsertRowid });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to create product: ' + error.message });
+  }
+});
+
+// Update single product
+app.put('/api/products/:id', authenticateToken, (req: any, res: any) => {
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  const { sku, name, bottom_price } = req.body;
+  if (!name || name.trim() === '') return res.status(400).json({ error: 'Product name is required' });
+
+  try {
+    const info = db.prepare('UPDATE products SET sku = ?, name = ?, bottom_price = ? WHERE id = ?').run(sku || null, name.trim(), bottom_price || 0, req.params.id);
+    if (info.changes === 0) return res.status(404).json({ error: 'Product not found' });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update product: ' + error.message });
+  }
+});
+
+// Delete single product
+app.delete('/api/products/:id', authenticateToken, (req: any, res: any) => {
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  try {
+    const info = db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+    if (info.changes === 0) return res.status(404).json({ error: 'Product not found' });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to delete product: ' + error.message });
   }
 });
 
@@ -391,7 +495,12 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (isMatch) {
       const { password, ...userData } = user;
-      const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
+      const token = jwt.sign({ 
+        id: user.id, 
+        role: user.role, 
+        email: user.email,
+        team: user.team 
+      }, JWT_SECRET, { expiresIn: '8h' });
       res.json({ token, user: userData });
     } else {
       res.status(401).json({ error: 'Invalid email or password' });
@@ -402,16 +511,54 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Get all products
-app.get('/api/products', (req, res) => {
-  const products = db.prepare('SELECT * FROM products').all();
-  res.json(products);
+// Change Password
+app.post('/api/auth/change-password', authenticateToken, async (req: any, res: any) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current and new password are required' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) return res.status(401).json({ error: 'Password lama salah' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to change password: ' + error.message });
+  }
+});
+
+// Get all products (with optional server-side search)
+app.get('/api/products', authenticateToken, (req: any, res: any) => {
+  const search = req.query.search as string;
+  try {
+    if (search && search.length >= 2) {
+      const products = db.prepare(
+        'SELECT * FROM products WHERE name LIKE ? OR sku LIKE ? LIMIT 200'
+      ).all(`%${search}%`, `%${search}%`);
+      res.json(products);
+    } else {
+      const products = db.prepare('SELECT * FROM products').all();
+      res.json(products);
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
 });
 
 // Create Invoice
-app.post('/api/invoices', (req, res) => {
-  let { invoice_number, date, customer_name, user_id, team, total_amount, items } = req.body;
-  if (!user_id || isNaN(user_id)) user_id = null;
+app.post('/api/invoices', authenticateToken, (req: any, res: any) => {
+  // Securely get user info from the token, not the request body
+  const user_id = req.user.id;
+  const team = req.user.team || 'General'; // Fallback for stability
+  const { invoice_number, date, customer_name, total_amount, items } = req.body;
 
   try {
     const insertInvoice = db.prepare(`
@@ -427,41 +574,134 @@ app.post('/api/invoices', (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?)
     `);
 
+    // Fallback lookup: match product to get bottom_price if not provided
+    const findProductBySku = db.prepare('SELECT bottom_price FROM products WHERE LOWER(sku) = LOWER(?)');
+    const findProductByName = db.prepare('SELECT bottom_price FROM products WHERE LOWER(name) = LOWER(?) ORDER BY bottom_price DESC LIMIT 1');
+
     for (const item of items) {
-      insertItem.run(invoiceId, item.productName, item.quantity, item.price, item.bottomPrice || 0, item.quantity * item.price);
+      let bottomPrice = item.bottomPrice || 0;
+      
+      // Server-side fallback: if bottomPrice is 0, try to match from products table
+      if (bottomPrice === 0 && item.productName) {
+        let match: any = null;
+        
+        // If productName is in format "SKU - PRODUCT NAME", try matching by SKU first
+        if (item.productName.includes(' - ')) {
+          const skuPart = item.productName.split(' - ')[0].trim();
+          match = findProductBySku.get(skuPart);
+        }
+        
+        // Try exact name match
+        if (!match) {
+          match = findProductByName.get(item.productName.trim());
+        }
+        
+        // Try matching individual parts after " - "
+        if (!match && item.productName.includes(' - ')) {
+          const parts = item.productName.split(' - ');
+          for (const part of parts) {
+            match = findProductByName.get(part.trim());
+            if (match && match.bottom_price > 0) break;
+          }
+        }
+        
+        if (match && match.bottom_price > 0) {
+          bottomPrice = match.bottom_price;
+        }
+      }
+      
+      insertItem.run(invoiceId, item.productName, item.quantity, item.price, bottomPrice, item.quantity * item.price);
     }
 
     res.status(201).json({ success: true, id: invoiceId });
   } catch (error: any) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(400).json({ error: 'Nomor invoice sudah terdaftar di sistem.' });
+    }
     console.error("POST /api/invoices error:", error);
     res.status(500).json({ error: 'Failed to create invoice: ' + error.message });
   }
 });
 
-// Get all invoices
-app.get('/api/invoices', (req, res) => {
+// Get invoices (with pagination, search, filter)
+app.get('/api/invoices', authenticateToken, (req: any, res: any) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit as string) || 50);
+    const offset = (page - 1) * limit;
+    const status = req.query.status as string;
+    const search = req.query.search as string;
+
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+    let where = '';
+    const params: any[] = [];
+    
+    // Isolation filter for users
+    if (!isAdmin) {
+      where += ' WHERE i.user_id = ?';
+      params.push(req.user.id);
+    }
+
+    if (status && status !== 'all') {
+      where += where ? ' AND' : ' WHERE';
+      where += ' i.status = ?';
+      params.push(status);
+    }
+    if (search) {
+      where += where ? ' AND' : ' WHERE';
+      where += ' (i.invoice_number LIKE ? OR i.customer_name LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    const countRow = db.prepare(`SELECT COUNT(*) as total FROM invoices i${where}`).get(...params) as any;
+
     const invoices = db.prepare(`
       SELECT 
         i.id, i.invoice_number, i.date, i.customer_name, i.user_id, i.team, i.total_amount, i.status,
         u.name as user_name,
         EXISTS (
-          SELECT 1 
-          FROM invoice_items ii
+          SELECT 1 FROM invoice_items ii
           WHERE ii.invoice_id = i.id AND ii.price < ii.bottom_price AND ii.bottom_price > 0
         ) as has_warning
       FROM invoices i
       LEFT JOIN users u ON i.user_id = u.id
+      ${where}
       ORDER BY i.date DESC, i.id DESC
-    `).all();
-    res.json(invoices);
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+
+    res.json({
+      data: invoices,
+      pagination: { page, limit, total: countRow.total, totalPages: Math.ceil(countRow.total / limit) }
+    });
   } catch (error) {
+    console.error("GET /api/invoices error:", error);
     res.status(500).json({ error: 'Failed to fetch invoices' });
   }
 });
 
+// Delete Invoice (admin only, Pending only)
+app.delete('/api/invoices/:id', authenticateToken, (req: any, res: any) => {
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  const invoiceId = req.params.id;
+  try {
+    const invoice = db.prepare('SELECT status FROM invoices WHERE id = ?').get(invoiceId) as any;
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    if (invoice.status !== 'Pending') {
+      return res.status(400).json({ error: 'Only pending invoices can be deleted' });
+    }
+    db.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').run(invoiceId);
+    db.prepare('DELETE FROM invoices WHERE id = ?').run(invoiceId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to delete invoice: ' + error.message });
+  }
+});
+
 // Get single invoice
-app.get('/api/invoice-detail', (req, res) => {
+app.get('/api/invoice-detail', authenticateToken, (req: any, res: any) => {
   try {
     const invoiceNumber = req.query.id as string;
     if (!invoiceNumber) {
@@ -480,6 +720,12 @@ app.get('/api/invoice-detail', (req, res) => {
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
+    // Role check for users
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+    if (!isAdmin && invoice.user_id !== req.user.id) {
+       return res.status(403).json({ error: 'Unauthorized to view this invoice.' });
+    }
+
     const items = db.prepare(`
       SELECT 
         ii.id, ii.product_name, ii.quantity, ii.price, ii.subtotal,
@@ -496,7 +742,11 @@ app.get('/api/invoice-detail', (req, res) => {
 });
 
 // Update invoice status (Approve / Reject)
-app.put('/api/invoices/status', (req, res) => {
+app.put('/api/invoices/status', authenticateToken, (req: any, res: any) => {
+  // Only admins can update status
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Unauthorized. Only admins can approve or reject invoices.' });
+  }
   try {
     const invoiceNumber = req.query.number as string;
     if (!invoiceNumber) {
@@ -507,11 +757,16 @@ app.put('/api/invoices/status', (req, res) => {
     // Status in DB has proper casing, so we capitalize first letter
     const capitalizedStatus = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 
-    const info = db.prepare(`
-      UPDATE invoices
-      SET status = ?
-      WHERE invoice_number = ?
-    `).run(capitalizedStatus, invoiceNumber);
+    let query = 'UPDATE invoices SET status = ? WHERE invoice_number = ?';
+    let params = [capitalizedStatus, invoiceNumber];
+
+    if (capitalizedStatus === 'Rejected') {
+      const newInvoiceNumber = `[REJECTED]-${invoiceNumber}-${Date.now()}`;
+      query = 'UPDATE invoices SET status = ?, invoice_number = ? WHERE invoice_number = ?';
+      params = [capitalizedStatus, newInvoiceNumber, invoiceNumber];
+    }
+
+    const info = db.prepare(query).run(...params);
 
     if (info.changes === 0) {
       return res.status(404).json({ error: 'Invoice not found' });
@@ -525,20 +780,94 @@ app.put('/api/invoices/status', (req, res) => {
 });
 
 // Get Invoice Stats for dashboard
-app.get('/api/stats', (req, res) => {
-  const stats = db.prepare(`
-    SELECT 
-      SUM(total_amount) as total_sales,
-      COUNT(*) as total_invoices,
-      status
-    FROM invoices
-    GROUP BY status
-  `).all();
-  res.json(stats);
+app.get('/api/stats', authenticateToken, (req: any, res: any) => {
+  try {
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+    const userId = req.user.id;
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Get Summary Stats (Approved, Pending, Rejected, Paid)
+    let whereInvoices = '';
+    const paramsInvoices: any[] = [];
+    if (!isAdmin) {
+      whereInvoices = ' WHERE user_id = ?';
+      paramsInvoices.push(userId);
+    }
+    
+    const summary = db.prepare(`
+      SELECT status, SUM(total_amount) as total_sales, COUNT(*) as total_invoices
+      FROM invoices
+      ${whereInvoices}
+      GROUP BY status
+    `).all(...paramsInvoices);
+
+    // 2. Get Daily Target & Today's Progress
+    const targetSet = db.prepare('SELECT value FROM settings WHERE key = ?').get('daily_target') as any;
+    const dailyTarget = targetSet ? Number(targetSet.value) : 0;
+    
+    let todaySalesWhere = ' WHERE date = ?';
+    const todaySalesParams: any[] = [today];
+    if (!isAdmin) {
+      todaySalesWhere += ' AND user_id = ?';
+      todaySalesParams.push(userId);
+    }
+    
+    const todaySalesData = db.prepare(`
+      SELECT SUM(total_amount) as total_sales
+      FROM invoices
+      ${todaySalesWhere} AND status != 'Rejected'
+    `).get(...todaySalesParams) as any;
+    const todaySales = todaySalesData ? (Number(todaySalesData.total_sales) || 0) : 0;
+
+    // 3. Admin-Only Breakdown
+    let teamBreakdown = null;
+    let userBreakdown = null;
+    let userTimeSeries = null;
+
+    if (isAdmin) {
+      teamBreakdown = db.prepare(`
+        SELECT team, SUM(total_amount) as total_sales, COUNT(*) as total_invoices
+        FROM invoices
+        GROUP BY team
+      `).all();
+
+      userBreakdown = db.prepare(`
+        SELECT u.id, u.name, u.team, u.role,
+               SUM(i.total_amount) as total_sales, 
+               COUNT(i.id) as total_invoices
+        FROM users u
+        LEFT JOIN invoices i ON u.id = i.user_id
+        GROUP BY u.id, u.name, u.team, u.role
+        ORDER BY total_sales DESC
+      `).all();
+
+      // Time series per user for comparative charts
+      userTimeSeries = db.prepare(`
+        SELECT i.user_id, u.name, u.role, i.date, SUM(i.total_amount) as daily_sales
+        FROM invoices i
+        JOIN users u ON i.user_id = u.id
+        WHERE i.status != 'Rejected'
+        GROUP BY i.user_id, i.date, u.role
+        ORDER BY i.date ASC
+      `).all();
+    }
+
+    res.json({ 
+      summary,
+      dailyTarget,
+      todaySales,
+      teamBreakdown,
+      userBreakdown,
+      userTimeSeries
+    });
+  } catch (error) {
+    console.error("GET /api/stats error:", error);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
 });
 
-// Get Settings
-app.get('/api/settings', (req, res) => {
+// Get Settings (authenticated)
+app.get('/api/settings', authenticateToken, (req: any, res: any) => {
   try {
     const settings = db.prepare('SELECT * FROM settings').all();
     const formatted = (settings as any[]).reduce((acc, curr) => {
@@ -551,13 +880,16 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
-// Update Settings
-app.post('/api/settings', (req, res) => {
+// Update Settings (admin only)
+app.post('/api/settings', authenticateToken, (req: any, res: any) => {
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
   const settings = req.body;
   
   try {
     const updateSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-    const transaction = db.transaction((data) => {
+    const transaction = db.transaction((data: Record<string, unknown>) => {
       for (const [key, value] of Object.entries(data)) {
         updateSetting.run(key, String(value));
       }
@@ -566,17 +898,132 @@ app.post('/api/settings', (req, res) => {
     transaction(settings);
     res.json({ success: true });
   } catch (error) {
-    console.error("Settings Update Error:", error);
+    logToFile(`Settings Update Error: ${error}`);
     res.status(500).json({ error: 'Failed to update settings' });
   }
 });
 
-// Global error handler
-app.use((err: any, req: any, res: any, next: any) => {
-  console.error('Unhandled Express Error:', err);
-  res.status(500).json({ error: err.message || 'Internal Server Error', stack: err.stack });
+// Payout Endpoints
+app.get('/api/test-payouts', (req, res) => {
+  res.json({ message: 'Payout routes are active' });
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+app.post('/api/payouts', (req, res, next) => {
+  logToFile(`DEBUG: Request /api/payouts started`);
+  next();
+}, authenticateToken, (req, res, next) => {
+  logToFile(`DEBUG: Auth passed for /api/payouts`);
+  next();
+}, upload.single('receipt'), (req: any, res: any) => {
+  logToFile(`DEBUG: Multer finished for /api/payouts`);
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+
+  const { userId, invoiceIds, notes, paymentDate, totalAmount } = req.body;
+  const ids = JSON.parse(invoiceIds || '[]');
+  
+  // Convert to Numbers explicitly (FormData sends everything as strings)
+  const uId = Number(userId);
+  const tAmount = Number(totalAmount);
+
+  console.log(`Processing payout for user ${uId}, amount ${tAmount}, invoices: ${ids}`);
+
+  if (!uId || !ids.length || isNaN(tAmount)) {
+    return res.status(400).json({ error: 'Missing or invalid payout data' });
+  }
+
+  try {
+    const insertPayout = db.prepare(`
+      INSERT INTO payouts (user_id, total_amount, payment_date, receipt_path, notes)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const insertPayoutItem = db.prepare(`
+      INSERT INTO payout_items (payout_id, invoice_id)
+      VALUES (?, ?)
+    `);
+
+    const updateInvoiceStatus = db.prepare(`
+      UPDATE invoices SET status = 'Paid' WHERE id = ?
+    `);
+
+    const processPayout = db.transaction(() => {
+      const result = insertPayout.run(uId, tAmount, paymentDate || new Date().toISOString(), req.file ? req.file.filename : null, notes || '');
+      const payoutId = result.lastInsertRowid;
+
+      for (const invId of ids) {
+        insertPayoutItem.run(payoutId, invId);
+        updateInvoiceStatus.run(invId);
+      }
+      return payoutId;
+    });
+
+    const payoutId = processPayout();
+    res.status(201).json({ success: true, id: payoutId });
+  } catch (error: any) {
+    const errorMsg = `POST /api/payouts error: ${error.message}\n${error.stack}`;
+    logToFile(errorMsg);
+    console.error(errorMsg);
+    res.status(500).json({ error: 'Failed to process payout' });
+  }
+});
+
+app.get('/api/payouts', authenticateToken, (req: any, res: any) => {
+  try {
+    let query = `
+      SELECT p.*, u.name as user_name 
+      FROM payouts p
+      JOIN users u ON p.user_id = u.id
+    `;
+    let params: any[] = [];
+
+    if (req.user.role === 'user') {
+      query += ' WHERE p.user_id = ?';
+      params.push(req.user.id);
+    }
+
+    query += ' ORDER BY p.payment_date DESC';
+    const payouts = db.prepare(query).all(...params);
+    res.json(payouts);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch payouts' });
+  }
+});
+
+app.get('/api/payouts/:id', authenticateToken, (req: any, res: any) => {
+  try {
+    const payout = db.prepare(`
+      SELECT p.*, u.name as user_name 
+      FROM payouts p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.id = ?
+    `).get(req.params.id) as any;
+
+    if (!payout) return res.status(404).json({ error: 'Payout not found' });
+
+    const items = db.prepare(`
+      SELECT i.invoice_number, i.total_amount, i.date
+      FROM payout_items pi
+      JOIN invoices i ON pi.invoice_id = i.id
+      WHERE pi.payout_id = ?
+    `).all(req.params.id);
+
+    res.json({ ...payout, items });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch payout detail' });
+  }
+});
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Global error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  logToFile(`Unhandled Error: ${err.message}\n${err.stack}`);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server running at http://0.0.0.0:${port}`);
 });

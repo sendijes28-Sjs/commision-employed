@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowLeft, Printer, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2, FileText, BadgeCheck, Hash, Calendar, Users, Briefcase, Activity, ListFilter, ShieldCheck, Download, Trash2, Edit, ChevronRight, LayoutGrid, DollarSign, Fingerprint, Globe } from "lucide-react";
+import { PageHeader } from "../components/PageHeader";
+import { Link, useParams, useNavigate } from "react-router";
+import { ArrowLeft, Printer, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2, FileText, BadgeCheck, Hash, Calendar, Users, Briefcase, Activity, ListFilter, ShieldCheck, Download, Trash2, Edit, ChevronRight, LayoutGrid, DollarSign, Fingerprint, Globe, Check, X } from "lucide-react";
 import axios from "axios";
+import { useAuth } from "../context/AuthContext";
+import { toast } from "sonner";
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = `http://${window.location.hostname}:4000/api`;
 
 interface InvoiceItem {
   id: string;
@@ -38,6 +41,8 @@ export function InvoiceDetailPage() {
   const id = params["*"] || "";
   const [invoice, setInvoice] = useState<InvoiceDetailType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
 
   useEffect(() => {
     if (!id) return setIsLoading(false);
@@ -73,19 +78,37 @@ export function InvoiceDetailPage() {
     fetchDetail();
   }, [id]);
 
+  const handlePrint = () => window.print();
+
+  const navigate = useNavigate();
+  const updateStatus = async (newStatus: string) => {
+    try {
+      await axios.put(`${API_URL}/invoices/status?number=${encodeURIComponent(id)}`, { status: newStatus });
+      toast.success(`Invoice ${newStatus === 'approved' ? 'disetujui' : 'ditolak'}`);
+      
+      if (newStatus === 'rejected') {
+        navigate('/invoices');
+      } else {
+        setInvoice(prev => prev ? { ...prev, status: newStatus.charAt(0).toUpperCase() + newStatus.slice(1) } : prev);
+      }
+    } catch (err) {
+      toast.error('Gagal mengubah status invoice');
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center p-40 space-y-8">
+      <div className="flex flex-col items-center justify-center p-20 space-y-6">
         <div className="relative">
-           <div className="w-20 h-20 border-8 border-primary/10 rounded-[2.5rem] rotate-45" />
-           <div className="w-20 h-20 border-8 border-primary border-t-transparent rounded-[2.5rem] animate-spin absolute inset-0 rotate-45" />
+           <div className="w-16 h-16 border-4 border-primary/10 rounded-2xl rotate-45" />
+           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-2xl animate-spin absolute inset-0 rotate-45" />
            <div className="absolute inset-0 flex items-center justify-center">
-              <Activity className="w-8 h-8 text-primary animate-pulse" />
+              <Activity className="w-6 h-6 text-primary animate-pulse" />
            </div>
         </div>
         <div className="text-center">
-           <p className="font-black text-2xl tracking-tighter text-slate-900">Decoding Registry Payload...</p>
-           <p className="text-[10px] font-black text-primary uppercase tracking-[0.4em] mt-3 animate-pulse">Accessing Ledger Serial {id}</p>
+           <p className="font-semibold text-xl tracking-tight text-slate-900">Loading Invoice Details...</p>
+           <p className="text-[9px] font-semibold text-primary uppercase tracking-[0.4em] mt-2 animate-pulse opacity-70">Fetching record #{id}</p>
         </div>
       </div>
     );
@@ -93,24 +116,24 @@ export function InvoiceDetailPage() {
 
   if (!invoice) {
     return (
-      <div className="space-y-10 max-w-5xl mx-auto py-20">
-        <Link to="/invoices" className="group inline-flex items-center gap-4 text-slate-400 hover:text-primary transition-all font-black uppercase tracking-[0.3em] text-[10px]">
-           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> TERMINATE SEARCH & RETURN
+      <div className="space-y-6 max-w-4xl mx-auto py-12">
+        <Link to="/invoices" className="group inline-flex items-center gap-3 text-slate-400 hover:text-primary transition-all font-semibold uppercase tracking-[0.3em] text-[9px]">
+           <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" /> BACK TO LIST
         </Link>
-        <div className="bg-white rounded-[4rem] p-24 border border-slate-100 shadow-2xl shadow-slate-200/50 text-center relative overflow-hidden">
-           <div className="absolute top-0 right-0 p-12 opacity-[0.03]">
-              <ShieldCheck className="w-64 h-64" />
+        <div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-xl shadow-slate-200/50 text-center relative overflow-hidden">
+           <div className="absolute top-0 right-0 p-8 opacity-[0.02]">
+              <ShieldCheck className="w-48 h-48" />
            </div>
-           <div className="w-24 h-24 bg-slate-50 rounded-[2rem] mx-auto flex items-center justify-center mb-10 shadow-inner">
-              <FileText className="w-12 h-12 text-slate-200" />
+           <div className="w-16 h-16 bg-slate-50 rounded-xl mx-auto flex items-center justify-center mb-6 shadow-inner">
+              <FileText className="w-8 h-8 text-slate-200" />
            </div>
-           <h2 className="text-4xl font-black text-slate-900 tracking-tighter mb-4">Transcript Integrity Failed</h2>
-           <p className="text-slate-400 font-medium text-lg leading-relaxed max-w-md mx-auto italic">
-             The requested serial <strong className="text-slate-900 not-italic">#{id}</strong> could not be validated against the current block registry.
+           <h2 className="text-3xl font-semibold text-slate-900 tracking-tight mb-3">Invoice Not Found</h2>
+           <p className="text-slate-400 font-medium text-base leading-relaxed max-w-md mx-auto">
+             The requested invoice <strong className="text-slate-900 not-italic">#{id}</strong> could not be found or validated.
            </p>
-           <div className="mt-12 flex justify-center">
-              <button onClick={() => window.location.reload()} className="px-10 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-[10px] uppercase tracking-widest shadow-2xl shadow-slate-200 hover:scale-105 active:scale-95 transition-all">
-                 RE-INITIALIZE QUERY
+           <div className="mt-8 flex justify-center">
+              <button onClick={() => window.location.reload()} className="px-8 py-3.5 bg-slate-900 text-white rounded-xl font-semibold text-[9px] uppercase tracking-wide shadow-xl shadow-slate-200 hover:scale-105 active:scale-95 transition-all">
+                 RETRY LOADING
               </button>
            </div>
         </div>
@@ -124,111 +147,112 @@ export function InvoiceDetailPage() {
   const hasWarning = invoice.items.some(belowBottom);
 
   return (
-    <div className="space-y-12 pb-20 max-w-7xl mx-auto">
-      {/* Cinematic Navigation Architecture */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-         <Link to="/invoices" className="group flex items-center gap-6 px-10 py-5 bg-white border border-slate-100 rounded-[2.5rem] hover:bg-slate-900 hover:text-white transition-all duration-500 shadow-xl shadow-slate-200/50">
-            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-2 transition-transform" />
-            <span className="font-black uppercase tracking-[0.3em] text-[10px]">Return to Master Registry</span>
+    <div className="space-y-8 pb-20 max-w-7xl mx-auto">
+      {/* Navigation */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+         <Link to="/invoices" className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-100 rounded-lg hover:bg-slate-900 hover:text-white transition-all shadow-sm">
+            <ArrowLeft className="w-4 h-4" />
+            <span className="font-semibold uppercase tracking-wide text-[8px] opacity-70">Back to List</span>
          </Link>
          
-         <div className="flex items-center gap-4">
-            <button className="w-16 h-16 bg-white border border-slate-100 text-slate-400 rounded-3xl flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm">
-               <Download className="w-6 h-6" />
+         <div className="flex items-center gap-2">
+            <button onClick={handlePrint} className="w-9 h-9 bg-white border border-slate-100 text-slate-400 rounded-lg flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm">
+               <Download className="w-4 h-4" />
             </button>
-            <button className="flex items-center gap-5 px-10 py-5 bg-slate-900 border border-slate-800 text-white rounded-[2.5rem] hover:bg-slate-800 transition-all shadow-2xl shadow-slate-400/20 active:scale-95 font-black uppercase tracking-[0.2em] text-[10px]">
-               <Printer className="w-5 h-5 text-primary" />
-               Generate Physical Artifact
+            <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all font-semibold uppercase tracking-wide text-[8px] active:scale-95 shadow-md">
+               <Printer className="w-3.5 h-3.5" />
+               Print Invoice
             </button>
+            {isAdmin && invoice.status === 'Pending' && (
+              <>
+                <button onClick={() => updateStatus('approved')} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all font-semibold uppercase tracking-wide text-[8px] active:scale-95 shadow-md">
+                  <Check className="w-3.5 h-3.5" /> Approve
+                </button>
+                <button onClick={() => updateStatus('rejected')} className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-all font-semibold uppercase tracking-wide text-[8px] active:scale-95 shadow-md">
+                  <X className="w-3.5 h-3.5" /> Reject
+                </button>
+              </>
+            )}
          </div>
       </div>
 
       {/* Hero Header Transcript */}
-      <div className="bg-white rounded-[4rem] p-12 border border-slate-100 shadow-2xl shadow-slate-200/40 relative overflow-hidden group">
-         <div className="absolute top-0 right-0 p-12 opacity-[0.03] group-hover:scale-110 transition-transform duration-1000 grayscale group-hover:grayscale-0">
-            <Fingerprint className="w-80 h-80 text-primary" />
-         </div>
-         
-         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-12 relative z-10">
-            <div className="flex items-start gap-10">
+      <div className="bg-white rounded-xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
+         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+            <div className="flex items-start gap-5">
                <div className="relative">
-                  <div className="w-28 h-28 bg-slate-900 text-white rounded-[3rem] flex items-center justify-center shadow-2xl shadow-slate-300 group-hover:bg-primary transition-colors duration-500">
-                     <BadgeCheck className="w-14 h-14" />
+                  <div className="w-16 h-16 bg-slate-900 text-white rounded-xl flex items-center justify-center shadow-md group-hover:bg-primary transition-colors">
+                     <BadgeCheck className="w-8 h-8" />
                   </div>
-                  <div className={`absolute -bottom-2 -right-2 w-10 h-10 rounded-2xl ${status.dot} border-4 border-white shadow-lg flex items-center justify-center`}>
-                     <status.icon className="w-5 h-5 text-white" />
+                  <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg ${status.dot} border-2 border-white shadow flex items-center justify-center`}>
+                     <status.icon className="w-3 h-3 text-white" />
                   </div>
                </div>
                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mb-4">Transcript Identification</p>
-                  <h1 className="text-6xl font-black text-slate-900 tracking-tighter leading-none group-hover:text-primary transition-colors">{invoice.number}</h1>
-                  <div className="flex flex-wrap items-center gap-4 mt-6">
-                     <span className={`flex items-center gap-3 px-6 py-2.5 rounded-[1.5rem] border font-black uppercase tracking-[0.3em] text-[10px] ${status.classes} ${status.bg}`}>
-                        <div className={`w-2 h-2 rounded-full ${status.dot} animate-pulse`} />
-                        {status.label} Status
+                  <p className="text-[8px] font-semibold text-slate-400 uppercase tracking-wide mb-1 opacity-70">Invoice Number</p>
+                  <h1 className="text-3xl font-semibold text-slate-900 tracking-tight leading-none">{invoice.number}</h1>
+                  <div className="flex items-center gap-2 mt-3">
+                     <span className={`px-3 py-1 rounded-md border font-semibold uppercase tracking-wide text-[7px] ${status.classes} ${status.bg}`}>
+                        {status.label}
                      </span>
-                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] border border-slate-100 px-6 py-2.5 rounded-[1.5rem] bg-slate-50/50 flex items-center gap-3">
-                        <Calendar className="w-4 h-4" /> Logged: {invoice.date}
+                     <span className="text-[7px] font-semibold text-slate-400 uppercase tracking-wide border border-slate-100 px-3 py-1 rounded-md bg-slate-50/50 opacity-70">
+                        {invoice.date}
                      </span>
                   </div>
                </div>
             </div>
 
-            <div className="bg-slate-900 rounded-[3.5rem] p-10 text-white shadow-2xl shadow-slate-800 flex items-center gap-12 border border-white/5 relative overflow-hidden">
-               <div className="absolute inset-0 bg-gradient-to-tr from-primary to-transparent opacity-10" />
-               <div className="relative z-10 text-center">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-3 opacity-60">Node Integrity</p>
-                  <p className="text-3xl font-black">{invoice.items.length}</p>
-                  <p className="text-[9px] font-bold text-primary uppercase tracking-widest mt-1">Verified Clusters</p>
+            <div className="bg-slate-50 rounded-xl p-4 flex items-center gap-6 border border-slate-100">
+               <div className="text-center">
+                  <p className="text-[7px] font-semibold text-slate-400 uppercase tracking-wide mb-1 opacity-70">Items</p>
+                  <p className="text-lg font-semibold text-slate-900">{invoice.items.length}</p>
                </div>
-               <div className="w-[1px] h-16 bg-white/10 relative z-10" />
-               <div className="relative z-10 text-right">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-3 opacity-60">Net Valuation</p>
-                  <p className="text-4xl font-black text-white px-2 tracking-tighter">{formatRupiah(totalSales)}</p>
-                  <p className="text-[9px] font-bold text-primary uppercase tracking-widest mt-2">{hasWarning ? "⚠️ ACC-PRIORITY VIOLATION" : "CERTIFIED BOTTOM-PRICE"}</p>
+               <div className="w-[1px] h-8 bg-slate-200" />
+               <div className="text-right">
+                  <p className="text-[7px] font-semibold text-slate-400 uppercase tracking-wide mb-1 opacity-70">Total Amount</p>
+                  <p className="text-xl font-semibold text-primary tracking-tight">{formatRupiah(totalSales)}</p>
                </div>
             </div>
          </div>
       </div>
 
       {/* Intelligence Matrix Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
          {[
-           { icon: Users, label: "Client / Entity Identity", value: invoice.customer, color: "text-blue-500", bg: "bg-blue-50/50", border: "border-blue-100", desc: "Primary counterparty node" },
-           { icon: Briefcase, label: "Assigned Representative", value: invoice.userName, sub: `${invoice.team} Division`, color: "text-orange-500", bg: "bg-orange-50/50", border: "border-orange-100", desc: "Operational personnel lead" },
-           { icon: Activity, label: "Global Compliance Logic", value: hasWarning ? "Critical Conflict" : "High Confidence", color: hasWarning ? "text-rose-500" : "text-emerald-500", bg: hasWarning ? "bg-rose-50/50" : "bg-emerald-50/50", border: hasWarning ? "border-rose-100" : "border-emerald-100", desc: "Real-time audit heuristic" },
+           { icon: Users, label: "Customer", value: invoice.customer, color: "text-slate-900", bg: "bg-slate-50", border: "border-slate-100", desc: "Customer details." },
+           { icon: Briefcase, label: "Assigned To", value: invoice.userName, sub: invoice.team, color: "text-slate-900", bg: "bg-slate-50", border: "border-slate-100", desc: "User and team assignment." },
+           { icon: Activity, label: "Audit Status", value: hasWarning ? "Warning" : "Approved", color: hasWarning ? "text-orange-600" : "text-emerald-600", bg: hasWarning ? "bg-orange-50" : "bg-emerald-50", border: "border-transparent", desc: "Price verification result." },
          ].map((box, i) => (
-           <div key={i} className="bg-white rounded-[3.5rem] p-10 border border-slate-100 shadow-xl shadow-slate-200/30 flex items-start gap-8 group hover:shadow-2xl hover:-translate-y-2 transition-all duration-500">
-              <div className={`w-16 h-16 rounded-[1.75rem] ${box.bg} ${box.color} flex items-center justify-center border ${box.border} shadow-sm group-hover:rotate-12 transition-transform`}>
-                 <box.icon className="w-8 h-8" />
+           <div key={i} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex items-start gap-3">
+              <div className={`w-10 h-10 rounded-lg ${box.bg} ${box.color} flex items-center justify-center border ${box.border} shadow-sm flex-shrink-0`}>
+                 <box.icon className="w-5 h-5" />
               </div>
-              <div className="flex-1">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-3">{box.label}</p>
-                 <p className="text-xl font-black text-slate-900 group-hover:text-primary transition-colors leading-tight">{box.value}</p>
-                 {box.sub && <p className="text-[10px] font-black text-primary uppercase tracking-widest mt-2 bg-slate-50 px-3 py-1 rounded-lg inline-block">{box.sub}</p>}
-                 <p className="text-[10px] text-slate-400 font-bold mt-4 uppercase tracking-widest opacity-60 leading-relaxed italic">{box.desc}</p>
+              <div className="flex-1 min-w-0">
+                 <p className="text-[8px] font-semibold text-slate-400 uppercase tracking-wide mb-1">{box.label}</p>
+                 <p className="text-sm font-semibold text-slate-900 truncate leading-tight">{box.value}</p>
+                 {box.sub && <p className="text-[7px] font-semibold text-primary uppercase tracking-wide mt-1 opacity-70">{box.sub}</p>}
+                 <p className="text-[9px] text-slate-400 font-medium mt-1.5">{box.desc}</p>
               </div>
            </div>
          ))}
       </div>
 
-      {/* Main Forensic Ledger */}
-      <div className="bg-white rounded-[4.5rem] border border-slate-100 shadow-2xl shadow-slate-200/40 overflow-hidden mt-8">
-        <div className="px-12 py-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
-           <div className="flex items-center gap-6">
-              <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-xl shadow-slate-200">
-                 <ListFilter className="w-7 h-7" />
+      {/* Invoice Details */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mt-2">
+        <div className="px-5 py-3 border-b border-slate-50 flex items-center justify-between">
+           <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-slate-900 text-white rounded-lg flex items-center justify-center shadow-md">
+                 <ListFilter className="w-4 h-4" />
               </div>
               <div>
-                 <h3 className="text-2xl font-black text-slate-900 tracking-tight">Transactional Transcript Nodes</h3>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Granular breakdown of market extension value</p>
+                 <h3 className="text-base font-semibold text-slate-900 tracking-tight">Invoice Items</h3>
+                 <p className="text-[8px] font-semibold text-slate-400 uppercase tracking-wide mt-0.5 opacity-70">Detailed list of products.</p>
               </div>
            </div>
-           {hasWarning && (
-             <div className="flex items-center gap-4 bg-rose-600 text-white px-8 py-4 rounded-[2rem] shadow-2xl shadow-rose-200 animate-pulse">
-                <ShieldAlert className="w-5 h-5" />
-                <span className="text-[10px] font-black uppercase tracking-[0.3em]">Margin Dilution Warning</span>
-             </div>
+           {isAdmin && hasWarning && (
+              <div className="flex items-center gap-2 bg-rose-600 text-white px-3 py-1 rounded-md shadow-md animate-pulse">
+                 <span className="text-[7px] font-semibold uppercase tracking-wide">Pricing Violation</span>
+              </div>
            )}
         </div>
         
@@ -236,55 +260,45 @@ export function InvoiceDetailPage() {
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr className="bg-slate-50/50">
-                <th className="px-12 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">Index ID</th>
-                <th className="px-12 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">Specification Node</th>
-                <th className="px-12 py-8 text-center text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">Capacity</th>
-                <th className="px-12 py-8 text-right text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">Execution Price</th>
-                <th className="px-12 py-8 text-right text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">Certified Floor</th>
-                <th className="px-12 py-8 text-right text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">Registry Total</th>
+                <th className="px-5 py-3 text-left text-[8px] font-semibold uppercase tracking-wide text-slate-400">Item #</th>
+                <th className="px-5 py-3 text-left text-[8px] font-semibold uppercase tracking-wide text-slate-400">Product Name</th>
+                <th className="px-5 py-3 text-center text-[8px] font-semibold uppercase tracking-wide text-slate-400">Qty</th>
+                <th className="px-5 py-3 text-right text-[8px] font-semibold uppercase tracking-wide text-slate-400">Price</th>
+                {isAdmin && (
+                  <th className="px-5 py-3 text-right text-[8px] font-semibold uppercase tracking-wide text-slate-400">Min Price</th>
+                )}
+                <th className="px-5 py-3 text-right text-[8px] font-semibold uppercase tracking-wide text-slate-400">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
                {invoice.items.map((item, idx) => {
                  const isIssue = belowBottom(item);
                  return (
-                   <tr key={item.id} className={`group ${isIssue ? 'bg-rose-50/10' : 'hover:bg-slate-50/30'} transition-all duration-300`}>
-                      <td className="px-12 py-8">
-                         <span className="text-[10px] text-slate-300 font-black uppercase tracking-widest bg-slate-100 p-2.5 rounded-xl">ID-{idx + 1}</span>
+                    <tr key={item.id} className={`group ${isIssue ? 'bg-rose-50/10' : 'hover:bg-slate-50/30'} transition-all`}>
+                      <td className="px-5 py-3">
+                         <span className="text-[8px] text-slate-300 font-semibold">#{idx + 1}</span>
                       </td>
-                      <td className="px-12 py-8">
-                         <div className="flex items-center gap-6">
-                            {isIssue ? (
-                               <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center shadow-sm">
-                                  <AlertTriangle className="w-5 h-5" />
-                               </div>
-                            ) : (
-                               <div className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center border border-slate-100">
-                                  <LayoutGrid className="w-5 h-5 opacity-40" />
-                               </div>
-                            )}
+                      <td className="px-5 py-3">
+                         <div className="flex items-center gap-3">
                             <div>
-                               <p className={`text-base font-black ${isIssue ? 'text-rose-600' : 'text-slate-800'}`}>{item.product}</p>
-                               <div className="flex items-center gap-2 mt-1">
-                                  <div className={`w-1.5 h-1.5 rounded-full ${isIssue ? 'bg-rose-500' : 'bg-emerald-500'}`} />
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Verified SKU Catalog Entry</span>
-                               </div>
+                               <p className={`text-[11px] font-semibold ${isIssue ? 'text-orange-600' : 'text-slate-800'}`}>{item.product}</p>
+                               <p className="text-[7px] font-semibold text-slate-400 uppercase tracking-wide leading-none mt-1 opacity-70">Product Name</p>
                             </div>
                          </div>
                       </td>
-                      <td className="px-12 py-8 text-center">
-                         <span className="text-sm font-black text-slate-900 bg-slate-50 px-5 py-2.5 rounded-2xl border border-slate-100 shadow-sm">{item.quantity}</span>
+                      <td className="px-5 py-3 text-center">
+                         <span className="text-[10px] font-semibold text-slate-900">{item.quantity}</span>
                       </td>
-                      <td className="px-12 py-8 text-right">
-                         <p className={`text-base font-black ${isIssue ? 'text-rose-600' : 'text-slate-900'} tracking-tighter`}>{formatRupiah(item.price)}</p>
-                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Market Extension</p>
+                      <td className="px-5 py-3 text-right">
+                         <p className={`text-[10px] font-semibold ${isAdmin && isIssue ? 'text-orange-600' : 'text-slate-900'} tracking-tight`}>{formatRupiah(item.price)}</p>
                       </td>
-                      <td className="px-12 py-8 text-right">
-                         <span className="text-xs font-black text-slate-400 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">{formatRupiah(item.bottomPrice)}</span>
-                      </td>
-                      <td className="px-12 py-8 text-right">
-                         <p className="text-lg font-black text-primary tracking-tighter">{formatRupiah(item.price * item.quantity)}</p>
-                         <p className="text-[9px] font-black text-primary/40 uppercase tracking-widest mt-1">Certified Extension</p>
+                      {isAdmin && (
+                        <td className="px-5 py-3 text-right">
+                           <span className="text-[9px] font-semibold text-slate-400 opacity-70">{formatRupiah(item.bottomPrice)}</span>
+                        </td>
+                      )}
+                      <td className="px-5 py-3 text-right">
+                         <p className="text-[10px] font-semibold text-primary tracking-tight">{formatRupiah(item.price * item.quantity)}</p>
                       </td>
                    </tr>
                  );
@@ -293,39 +307,34 @@ export function InvoiceDetailPage() {
           </table>
         </div>
         
-        <div className="p-16 bg-slate-900 text-white border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-12 relative overflow-hidden">
-           <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-transparent opacity-30" />
-           <div className="flex items-center gap-12 relative z-10">
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-3xl border border-white/10">
-                    <ShieldCheck className="w-6 h-6 text-emerald-400" />
-                 </div>
-                 <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">Audit Signature</p>
-                    <p className="text-xs font-black uppercase tracking-widest text-white/70 italic">Genesis Hub Secure Log 2.0</p>
-                 </div>
-              </div>
-              <div className="w-[1px] h-12 bg-white/10 hidden md:block" />
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-3xl border border-white/10">
-                    <Globe className="w-6 h-6 text-primary" />
-                 </div>
-                 <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">Global Registry</p>
-                    <p className="text-xs font-black uppercase tracking-widest text-white/70 italic">End-to-End Encryption Applied</p>
-                 </div>
-              </div>
-           </div>
-           
-           <div className="text-right flex flex-col items-end relative z-10">
-              <div className="flex items-center gap-3 mb-4">
-                 <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em]">Consolidated Valuation total</p>
-              </div>
-              <h4 className="text-7xl font-black text-white tracking-widest leading-none drop-shadow-2xl">{formatRupiah(totalSales)}</h4>
-              <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mt-6 border border-primary/30 px-6 py-2 rounded-full bg-primary/5">Certified Ledger State: {invoice.status.toUpperCase()}</p>
-           </div>
-        </div>
+         <div className="p-8 bg-slate-900 text-white border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-6">
+               <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center border border-white/10">
+                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                     <p className="text-[7px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5 opacity-70">Security</p>
+                     <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50 leading-none">Verified</p>
+                  </div>
+               </div>
+               <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center border border-white/10">
+                     <Globe className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                     <p className="text-[7px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5 opacity-70">System</p>
+                     <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50 leading-none">Automated</p>
+                  </div>
+               </div>
+            </div>
+            
+            <div className="text-right">
+               <p className="text-[8px] font-semibold text-slate-500 uppercase tracking-wide mb-1 leading-none opacity-70">Total Valuation</p>
+               <h4 className="text-3xl font-semibold text-white tracking-wide leading-none mb-2">{formatRupiah(totalSales)}</h4>
+               <p className="text-[7px] font-semibold text-primary uppercase tracking-wide bg-primary/10 px-3 py-1 rounded inline-block">STATUS: {invoice.status.toUpperCase()}</p>
+            </div>
+         </div>
       </div>
     </div>
   );

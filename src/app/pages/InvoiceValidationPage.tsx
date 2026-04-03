@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { PageHeader } from "../components/PageHeader";
+import { StatusBadge } from "../components/StatusBadge";
 import { Link } from "react-router";
 import { Check, X, Eye, AlertTriangle, CheckCircle2, Clock, ShieldCheck, TrendingDown, LayoutGrid, List, ChevronRight, Activity, ShieldAlert, BadgeCheck, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 
-const API_URL = "http://localhost:3001/api";
+const API_URL = `http://${window.location.hostname}:4000/api`;
 
 interface ValidationInvoice {
   number: string;
@@ -26,8 +28,9 @@ export function InvoiceValidationPage() {
 
   const fetchInvoices = async () => {
     try {
-      const res = await axios.get(`${API_URL}/invoices`);
-      let formatted: ValidationInvoice[] = res.data.map((inv: any) => ({
+      const res = await axios.get(`${API_URL}/invoices?limit=9999`);
+      const rawData = res.data?.data || res.data || [];
+      let formatted: ValidationInvoice[] = rawData.map((inv: any) => ({
         number: inv.invoice_number,
         userName: inv.user_name || "Unknown User",
         team: inv.team,
@@ -67,191 +70,245 @@ export function InvoiceValidationPage() {
   const isUserRole = user?.role === "user";
   const pendingCount = invoices.filter((i) => i.status === "pending").length;
   const warningCount = invoices.filter((i) => i.hasWarning && i.status === "pending").length;
+  const totalInvoices = invoices.length;
+  const auditScore = totalInvoices === 0 ? 100 : Math.round(((totalInvoices - warningCount) / totalInvoices) * 100);
+
 
   return (
-    <div className="space-y-10 pb-20 max-w-7xl mx-auto">
-      {/* Premium Header Architecture */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+    <div className="space-y-6 pb-10 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-tight flex items-center gap-4">
-            <span className="bg-slate-900 text-white p-3 rounded-[1.5rem] shadow-2xl shadow-slate-200">
-              <ShieldCheck className="w-10 h-10" />
-            </span>
-            Valuation Audit Hub
-          </h1>
-          <p className="text-muted-foreground mt-3 font-medium italic">
-            {isUserRole ? "Review your pending ledger submissions" : "Enterprise verification of bottom-price integrity and team quota compliance"}
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Invoice Review</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {isUserRole ? "Review your pending submissions." : "Verify invoice status and price compliance."}
           </p>
         </div>
-        
-        <div className="bg-white border border-slate-100 p-2 rounded-[2rem] flex items-center gap-2 shadow-xl shadow-slate-200/50">
-           <button 
-             onClick={() => setViewMode("table")}
-             className={`px-6 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest flex items-center gap-2 ${viewMode === 'table' ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-400 hover:bg-slate-50'}`}
-           >
-              <List className="w-4 h-4" /> Sequential
-           </button>
-           <button 
-             onClick={() => setViewMode("grid")}
-             className={`px-6 py-3 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest flex items-center gap-2 ${viewMode === 'grid' ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-400 hover:bg-slate-50'}`}
-           >
-              <LayoutGrid className="w-4 h-4" /> Grid-X
-           </button>
+
+        <div className="bg-white border border-slate-200 p-1 rounded-lg flex items-center gap-0.5 shadow-sm">
+          <button
+            onClick={() => setViewMode("table")}
+            className={`px-3 py-1.5 rounded-md transition-all text-xs font-medium flex items-center gap-1.5 ${viewMode === 'table' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+          >
+            <List className="w-3.5 h-3.5" /> Table
+          </button>
+          <button
+            onClick={() => setViewMode("grid")}
+            className={`px-3 py-1.5 rounded-md transition-all text-xs font-medium flex items-center gap-1.5 ${viewMode === 'grid' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" /> Grid
+          </button>
         </div>
       </div>
 
-      {/* Audit Intelligence Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Pending Review", value: pendingCount, icon: Clock, color: "text-orange-600", bg: "bg-orange-50", desc: "Awaiting final settlement sign-off" },
-          { label: "Margin Warnings", value: warningCount, icon: ShieldAlert, color: "text-rose-600", bg: "bg-rose-50", desc: "Violations of bottom price integrity", show: !isUserRole },
-          { label: "Processed Records", value: invoices.filter(i => i.status !== 'pending').length, icon: BadgeCheck, color: "text-emerald-600", bg: "bg-emerald-50", desc: "Audit logs for current cycle" },
-          { label: "Ledger Confidence", value: "96.2%", icon: Activity, color: "text-blue-600", bg: "bg-blue-50", desc: "Real-time AI Match fidelity" },
+          { label: "Pending", value: pendingCount, icon: Clock, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100", desc: "Awaiting approval" },
+          { label: "Warnings", value: warningCount, icon: ShieldAlert, color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100", desc: "Pricing issues", show: !isUserRole },
+          { label: "Processed", value: invoices.filter(i => i.status !== 'pending').length, icon: BadgeCheck, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100", desc: "Completed reviews" },
+          { label: "Audit Score", value: `${auditScore}%`, icon: Activity, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100", desc: "Review accuracy" },
         ].filter(c => c.show !== false).map((card, idx) => (
-          <div key={idx} className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/40 group hover:shadow-2xl transition-all relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:scale-110 transition-transform">
-                <card.icon className="w-20 h-20" />
-             </div>
-             <div className={`w-14 h-14 rounded-2xl ${card.bg} ${card.color} flex items-center justify-center mb-6 shadow-sm`}>
-                <card.icon className="w-6 h-6" />
-             </div>
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">{card.label}</p>
-             <p className={`text-4xl font-black ${card.color} tracking-tighter`}>{card.value}</p>
-             <p className="text-[10px] text-slate-400 font-bold mt-2 uppercase tracking-widest opacity-60 leading-relaxed">{card.desc}</p>
+          <div key={idx} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+            <div className={`w-9 h-9 rounded-lg ${card.bg} ${card.color} flex items-center justify-center mb-3 border ${card.border}`}>
+              <card.icon className="w-4 h-4" />
+            </div>
+            <p className="text-xs font-medium text-slate-500 mb-1">{card.label}</p>
+            <p className={`text-xl font-semibold ${card.color}`}>{card.value}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{card.desc}</p>
           </div>
         ))}
       </div>
 
-      {/* Critical Violation Isolation Banner */}
+      {/* Warning Banner */}
       {!isUserRole && warningCount > 0 && (
-        <div className="relative overflow-hidden bg-rose-600 rounded-[3rem] p-10 text-white shadow-2xl shadow-rose-200 group">
-          <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:scale-125 transition-transform duration-1000">
-             <ShieldAlert className="w-48 h-48" />
-          </div>
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-10">
-            <div className="flex items-center gap-8">
-               <div className="w-20 h-20 bg-white/10 rounded-[2rem] flex items-center justify-center backdrop-blur-3xl border border-white/20 shadow-2xl">
-                  <AlertTriangle className="w-10 h-10 animate-pulse text-white" />
-               </div>
-               <div>
-                  <h3 className="text-3xl font-black tracking-tight leading-tight">Margin Dilution Crisis</h3>
-                  <p className="font-medium opacity-80 mt-3 max-w-2xl leading-relaxed">
-                    Corporate forensics identified <strong>{warningCount}</strong> active submissions containing products optimized below the certified bottom price. Immediate auditor intervention is MANDATORY.
-                  </p>
-               </div>
+        <div className="bg-rose-600 rounded-xl p-5 text-white shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
+              <AlertTriangle className="w-5 h-5 animate-pulse" />
             </div>
-            <button className="bg-white text-rose-600 px-12 py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] hover:scale-105 transition-all shadow-2xl shadow-rose-900/20 active:scale-95 flex items-center gap-3">
-               ISOLATE VIOLATIONS <LayoutGrid className="w-4 h-4" />
-            </button>
+            <div>
+              <h3 className="text-base font-semibold">Price Discrepancies Detected</h3>
+              <p className="text-sm text-white/70 mt-0.5">
+                {warningCount} invoices have prices below the required minimum.
+              </p>
+            </div>
           </div>
+          <button className="bg-white text-rose-600 px-4 py-2 rounded-lg text-xs font-semibold hover:bg-white/90 transition-all shadow-sm active:scale-[0.98] flex items-center gap-2">
+            Review Discrepancies <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
-      {/* Master Audit Logs */}
-      <div className="bg-white rounded-[3.5rem] border border-slate-100 shadow-2xl shadow-slate-200/40 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0">
-            <thead className="bg-slate-50/50">
-              <tr>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Audit Serial</th>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Assignee Personnel</th>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Registry Valuation</th>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Compliance Logic</th>
-                <th className="px-10 py-8 text-left text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Logged Timestamp</th>
-                <th className="px-10 py-8 text-center text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Audit Verdict</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
-                <tr>
-                   <td colSpan={10} className="p-32 text-center text-slate-400 font-black uppercase tracking-widest text-[10px]">
-                      <div className="w-14 h-14 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-                      Synchronizing Audit Queue...
-                   </td>
+      {/* Table View */}
+      {viewMode === "table" ? (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-100">
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Invoice #</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">User</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Amount</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Compliance</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Date</th>
+                  <th className="px-5 py-3 text-center text-xs font-medium text-slate-500">Action</th>
                 </tr>
-              ) : invoices.length === 0 ? (
-                <tr>
-                   <td colSpan={10} className="p-32 text-center text-slate-400">
-                      <div className="w-20 h-20 bg-slate-50 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6">
-                         <ShieldCheck className="w-10 h-10 opacity-10" />
-                      </div>
-                      <p className="font-black text-2xl tracking-tighter text-slate-900">Queue is Clear</p>
-                      <p className="text-sm font-medium mt-2">Zero records awaiting auditor manual review.</p>
-                   </td>
-                </tr>
-              ) : (
-                invoices.map((inv) => (
-                  <tr key={inv.number} className={`group hover:bg-slate-50/50 transition-all ${inv.hasWarning && inv.status === 'pending' ? 'bg-rose-50/10' : ''}`}>
-                    <td className="px-10 py-8">
-                       <span className="text-sm font-black text-slate-900 group-hover:text-primary transition-colors">{inv.number}</span>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={10} className="p-16 text-center">
+                      <Loader2 className="w-7 h-7 animate-spin mx-auto text-primary" />
+                      <p className="text-xs text-slate-400 mt-3">Loading invoices...</p>
                     </td>
-                    <td className="px-10 py-8">
-                       <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-[1.25rem] bg-slate-100 text-slate-900 flex items-center justify-center text-[10px] font-black group-hover:bg-slate-900 group-hover:text-white transition-all shadow-sm">
-                             {inv.userName.split(" ").map(n => n[0]).join("")}
+                  </tr>
+                ) : invoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="p-16 text-center">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-200 mx-auto mb-3" />
+                      <p className="text-base font-semibold text-slate-900">All caught up!</p>
+                      <p className="text-xs text-slate-400 mt-1">No pending invoices to review.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  invoices.map((inv) => (
+                    <tr key={inv.number} className={`group hover:bg-slate-50/50 transition-colors ${inv.hasWarning && inv.status === 'pending' ? 'bg-rose-50/30' : ''}`}>
+                      <td className="px-5 py-3.5">
+                        <span className="text-sm font-semibold text-slate-900">#{inv.number}</span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-900 flex items-center justify-center text-[9px] font-bold group-hover:bg-slate-900 group-hover:text-white transition-all">
+                            {inv.userName.split(" ").map(n => n[0]).join("")}
                           </div>
                           <div>
-                             <p className="text-sm font-black text-slate-900 leading-none mb-1.5">{inv.userName}</p>
-                             <div className="flex items-center gap-2">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{inv.team}</span>
-                             </div>
+                            <p className="text-sm font-medium text-slate-900 leading-none">{inv.userName}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{inv.team}</p>
                           </div>
-                       </div>
-                    </td>
-                    <td className="px-10 py-8 text-sm font-black text-primary tracking-tighter">{inv.sales}</td>
-                    <td className="px-10 py-8">
-                      {inv.hasWarning ? (
-                        <div className="flex items-center gap-3 text-rose-600 bg-rose-50 px-5 py-2.5 rounded-2xl border border-rose-100 w-fit shadow-sm">
-                          <ShieldAlert className="w-4 h-4" />
-                          <span className="text-[9px] font-black uppercase tracking-[0.3em]">Critical Conflict</span>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-3 text-emerald-600 bg-emerald-50 px-5 py-2.5 rounded-2xl border border-emerald-100 w-fit shadow-sm">
-                          <BadgeCheck className="w-4 h-4" />
-                          <span className="text-[9px] font-black uppercase tracking-[0.3em]">Compliant Registry</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-10 py-8 text-xs font-black text-slate-400">{inv.date}</td>
-                    <td className="px-10 py-8">
-                       <div className="flex items-center justify-center gap-4">
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <p className="text-sm font-semibold text-slate-900 font-mono">{inv.sales}</p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
+                          inv.hasWarning ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {inv.hasWarning ? 'Warning' : 'Normal'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-slate-400">{inv.date}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-center gap-1.5">
                           {inv.status === 'pending' && !isUserRole ? (
                             <>
-                              <button 
+                              <button
                                 onClick={() => updateStatus(inv.number, 'approved')}
-                                className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-xl shadow-emerald-100 group/approve"
-                                title="Approve Entry"
+                                className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all"
+                                title="Approve"
                               >
-                                 <Check className="w-6 h-6 group-hover/approve:scale-125 transition-transform" />
+                                <Check className="w-4 h-4" />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => updateStatus(inv.number, 'rejected')}
-                                className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-xl shadow-rose-100 group/reject"
-                                title="Reject Entry"
+                                className="w-8 h-8 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all"
+                                title="Reject"
                               >
-                                 <X className="w-6 h-6 group-hover/reject:scale-125 transition-transform" />
+                                <X className="w-4 h-4" />
                               </button>
                             </>
                           ) : (
-                            <span className={`text-[10px] font-black px-6 py-2.5 rounded-[1.25rem] uppercase tracking-[0.3em] border ${
-                              inv.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                              inv.status === 'rejected' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-orange-50 text-orange-600 border-orange-100'
-                            }`}>
-                               {inv.status}
-                            </span>
+                            <StatusBadge status={inv.status} />
                           )}
-                          <Link to={`/invoices/${inv.number}`} className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all border border-transparent hover:border-slate-100">
-                             <Eye className="w-5 h-5" />
+                          <Link to={`/invoices/${inv.number}`} className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 hover:text-primary hover:bg-blue-50 transition-all">
+                            <Eye className="w-4 h-4" />
                           </Link>
-                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Grid View */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {isLoading ? (
+            <div className="col-span-full p-16 flex flex-col items-center justify-center">
+              <Loader2 className="w-7 h-7 animate-spin text-primary" />
+              <p className="text-xs text-slate-400 mt-3">Loading invoices...</p>
+            </div>
+          ) : invoices.length === 0 ? (
+            <div className="col-span-full p-16 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-200 mx-auto mb-3" />
+              <p className="text-base font-semibold text-slate-900">All caught up!</p>
+              <p className="text-xs text-slate-400 mt-1">No pending invoices to review.</p>
+            </div>
+          ) : (
+            invoices.map((inv) => (
+              <div key={inv.number} className={`bg-white rounded-xl border transition-all p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 duration-200 ${inv.hasWarning && inv.status === 'pending' ? 'border-rose-200' : 'border-slate-100'}`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900">#{inv.number}</span>
+                    <p className="text-xs text-slate-400 mt-0.5">{inv.date}</p>
+                  </div>
+                  <StatusBadge status={inv.status} />
+                </div>
+
+                <div className="flex items-center gap-2.5 mb-4 p-3 bg-slate-50 rounded-lg">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-100 text-slate-900 flex items-center justify-center text-[10px] font-bold shadow-sm">
+                    {inv.userName.split(" ").map(n => n[0]).join("")}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900 leading-none">{inv.userName}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{inv.team}</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-end mb-4">
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Total Amount</p>
+                    <p className="text-base font-semibold text-slate-900 font-mono">{inv.sales}</p>
+                  </div>
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
+                    inv.hasWarning ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
+                    {inv.hasWarning ? 'Warning' : 'Normal'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
+                  {inv.status === 'pending' && !isUserRole && (
+                    <div className="flex gap-2 flex-1">
+                      <button
+                        onClick={() => updateStatus(inv.number, 'approved')}
+                        className="flex-1 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Approve
+                      </button>
+                      <button
+                        onClick={() => updateStatus(inv.number, 'rejected')}
+                        className="flex-1 py-2 bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <X className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    </div>
+                  )}
+                  <Link
+                    to={`/invoices/${inv.number}`}
+                    className={`flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-900 hover:text-white transition-all ${inv.status === 'pending' && !isUserRole ? 'w-10 h-9 bg-slate-50' : 'w-full py-2 bg-slate-50 text-xs font-medium gap-2'}`}
+                  >
+                    {!isUserRole && inv.status === 'pending' ? <Eye className="w-4 h-4" /> : <><Eye className="w-3.5 h-3.5" /> View Details</>}
+                  </Link>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

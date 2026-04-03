@@ -47,6 +47,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+          const errorMsg = error.response.data?.error || "";
+          if (errorMsg.toLowerCase().includes("token") || errorMsg.toLowerCase().includes("expired")) {
+            logout();
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, []);
+
   return (
     <AuthContext.Provider value={{ user, login, logout, loading }}>
       {children}

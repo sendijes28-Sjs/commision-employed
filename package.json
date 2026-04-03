@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite",
-    "server": "tsx server/index.ts",
+    "dev": "vite --host --port 3000",
+    "server": "tsx watch server/index.ts",
+    "seed:products": "tsx server/import_products.ts",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\""
   },
   "dependencies": {
@@ -49,6 +50,7 @@
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
     "date-fns": "3.6.0",
+    "dotenv": "^17.3.1",
     "embla-carousel-react": "8.6.0",
     "input-otp": "1.4.2",
     "jsonwebtoken": "^9.0.3",
