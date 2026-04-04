@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { ShieldCheck, Mail, Lock, Loader2, TrendingUp, Users, ChevronRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import axios from "axios";
+
+const API_URL = `http://${window.location.hostname}:4000/api`;
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,157 +21,146 @@ export function LoginPage() {
     setError("");
 
     try {
-      login(email, password);
+      const response = await axios.post(`${API_URL}/auth/login`, { email, password });
+      const { token, user: userData } = response.data;
+      login(token, userData);
       navigate("/");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Invalid authentication credentials");
+      setError(err.response?.data?.error || "Invalid authentication credentials");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-400/10 rounded-full blur-[120px]" />
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-40">
+        <div className="absolute top-[-10%] left-[-10%] w-[30%] h-[30%] bg-primary/5 rounded-full blur-[80px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-blue-400/5 rounded-full blur-[80px]" />
       </div>
 
-      <div className="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-2 gap-0 bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200 overflow-hidden relative z-10 border border-white">
-        
-        {/* Left Side: Illustration & Value Proposition */}
-        <div className="hidden lg:flex flex-col justify-between p-12 bg-slate-900 text-white relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-transparent opacity-50" />
-          
-          <div className="relative z-10 flex items-center gap-2 mb-12">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-              <ShieldCheck className="w-6 h-6 text-white" />
+      <div className="max-w-4xl w-full grid grid-cols-1 lg:grid-cols-2 bg-white rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden relative z-10 border border-slate-100">
+        <div className="hidden lg:flex flex-col justify-between p-8 bg-slate-900 text-white relative">
+          <div className="relative z-10 flex items-center gap-2 mb-8">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-black tracking-tighter">PT. Aneka Delapan Dekorasi.</span>
+            <span className="text-sm font-semibold tracking-tighter italic">Aneka Delapan Dekorasi</span>
           </div>
 
-          <div className="relative z-10 space-y-8">
-            <h1 className="text-5xl font-black leading-[1.1] tracking-tight">
-              Aplikasi  <br />
-              <span className="text-primary">Penghitung Komisi</span>.
+          <div className="relative z-10 space-y-4">
+            <h1 className="text-3xl font-semibold leading-none tracking-tight">
+              Commission <br />
+              <span className="text-primary italic">System</span>
             </h1>
-            <p className="text-lg text-slate-400 font-medium max-w-md">
-              Aplikasi ini digunakan untuk menghitung komisi karyawan PT. Aneka Delapan Dekorasi.
+            <p className="text-xs text-slate-400 font-semibold max-w-[240px] italic">
+              Aplikasi pendukung perhitungan komisi internal PT. Aneka Delapan Dekorasi.
             </p>
 
-            <div className="grid grid-cols-2 gap-6 pt-6">
-              <div className="bg-slate-800/50 p-6 rounded-2xl border border-white/5 backdrop-blur-sm">
-                <TrendingUp className="w-6 h-6 text-primary mb-3" />
-                <p className="text-2xl font-black">98.4%</p>
-                <p className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-1">Accuracy Rate</p>
+            <div className="grid grid-cols-2 gap-3 pt-4">
+              <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                <TrendingUp className="w-4 h-4 text-primary mb-2" />
+                <p className="text-xl font-semibold">98.4%</p>
+                <p className="text-[7px] text-slate-400 uppercase font-semibold tracking-widest mt-1 italic">Accuracy Rate</p>
               </div>
-              <div className="bg-slate-800/50 p-6 rounded-2xl border border-white/5 backdrop-blur-sm">
-                <Users className="w-6 h-6 text-blue-400 mb-3" />
-                <p className="text-2xl font-black">20+</p>
-                <p className="text-xs text-slate-400 uppercase font-bold tracking-widest mt-1">Active Staff</p>
+              <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                <Users className="w-4 h-4 text-blue-400 mb-2" />
+                <p className="text-xl font-semibold">20+</p>
+                <p className="text-[7px] text-slate-400 uppercase font-semibold tracking-widest mt-1 italic">Active Staff</p>
               </div>
             </div>
           </div>
-
-          <div className="relative z-10 flex items-center gap-4 pt-12">
-
-          </div>
+          <div className="relative z-10 pt-8" />
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="p-8 lg:p-16 flex flex-col justify-center">
-          <div className="lg:hidden flex items-center gap-2 mb-12">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
-              <ShieldCheck className="w-5 h-5 text-white" />
+        <div className="p-8 lg:p-10 flex flex-col justify-center">
+          <div className="lg:hidden flex items-center gap-2 mb-8">
+            <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center shadow-sm">
+              <ShieldCheck className="w-4 h-4 text-white" />
             </div>
-            <span className="text-lg font-black tracking-tighter">CommisionHub</span>
+            <span className="text-base font-semibold tracking-tighter italic">Commission System</span>
           </div>
 
-          <div className="mb-10">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Welcome Back</h2>
-            <p className="text-slate-500 font-medium mt-2">Access your performance dashboard below</p>
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-slate-900 tracking-tight leading-none">Welcome Back</h2>
+            <p className="text-slate-500 font-semibold mt-2 text-xs italic opacity-70">Enter your credentials to continue</p>
           </div>
 
           {error && (
-            <div className="mb-8 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 text-sm font-bold">
-              <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
-                 <ShieldCheck className="w-4 h-4" />
-              </div>
-              {error}
+            <div className="mb-6 p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 text-[10px] font-semibold italic">
+               <ShieldCheck className="w-3.5 h-3.5" />
+               {error}
             </div>
           )}
 
           <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Work Email</label>
+            <div className="space-y-1.5">
+              <label className="text-[8px] font-semibold uppercase tracking-widest text-slate-400 ml-1 italic">Email Address</label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
-                  <Mail className="w-5 h-5" />
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-300 group-focus-within:text-primary transition-colors">
+                  <Mail className="w-4 h-4" />
                 </div>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-white transition-all font-bold placeholder:font-medium"
+                  className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white transition-all font-semibold text-xs"
                   placeholder="name@company.com"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between ml-1">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Password</label>
-                <a href="#" className="text-xs font-black text-primary uppercase tracking-widest hover:underline">Forgot?</a>
+                <label className="text-[8px] font-semibold uppercase tracking-widest text-slate-400 italic">Password</label>
+                <a href="#" className="text-[8px] font-semibold text-primary uppercase tracking-widest hover:underline italic opacity-70">Forgot?</a>
               </div>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
-                  <Lock className="w-5 h-5" />
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-300 group-focus-within:text-primary transition-colors">
+                  <Lock className="w-4 h-4" />
                 </div>
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-white transition-all font-bold placeholder:font-medium"
-                  placeholder="••••••••"
+                  className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white transition-all font-medium text-xs"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 />
               </div>
             </div>
 
-            <div className="pt-4">
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-primary text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-3 disabled:opacity-50"
+                className="w-full bg-primary text-white py-3 rounded-xl font-semibold uppercase tracking-widest text-[9px] hover:bg-primary/95 transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 italic"
               >
                 {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
                 ) : (
                   <>
-                    Sign In to Account
-                    <ChevronRight className="w-5 h-5" />
+                    Sign In
+                    <ChevronRight className="w-4 h-4" />
                   </>
                 )}
               </button>
             </div>
           </form>
 
-          <div className="mt-12 text-center">
-            <p className="text-slate-400 text-sm font-medium">
+          <div className="mt-8 text-center">
+            <p className="text-slate-400 text-[10px] font-semibold italic opacity-70">
               Don't have an account? <br className="lg:hidden" />
-              <a href="#" className="text-slate-900 font-black hover:text-primary transition-colors">Request Access from Admin</a>
+              <a href="#" className="text-slate-900 font-semibold hover:text-primary transition-colors ml-1 uppercase tracking-widest not-italic">Request Access</a>
             </p>
           </div>
         </div>
       </div>
       
-      {/* Visual Accents */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-6 opacity-30 select-none pointer-events-none grayscale contrast-150">
-        <span className="text-[10px] font-black tracking-[0.5em] text-slate-400">GLORY INTERIOR</span>
-        <div className="w-1 h-1 bg-slate-300 rounded-full" />
-        <span className="text-[10px] font-black tracking-[0.5em] text-slate-400">VALUATION SYSTEM</span>
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 opacity-10 select-none pointer-events-none grayscale">
+        <span className="text-[7px] font-semibold tracking-[0.3em] text-slate-400 italic">INTERNAL MANAGEMENT SYSTEM V2.0.4</span>
       </div>
     </div>
   );

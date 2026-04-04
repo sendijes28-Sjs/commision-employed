@@ -10,6 +10,7 @@ import { CommissionReportPage } from "./pages/CommissionReportPage";
 import { ProductPriceListPage } from "./pages/ProductPriceListPage";
 import { UsersManagementPage } from "./pages/UsersManagementPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { PayoutHistoryPage } from "./pages/PayoutHistoryPage";
 
 export const router = createBrowserRouter([
   {
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
       { path: "invoices/*", Component: InvoiceDetailPage },
       { path: "invoice-validation", Component: InvoiceValidationPage },
       { path: "commission-reports", Component: CommissionReportPage },
+      { path: "payout-history", Component: PayoutHistoryPage },
       { path: "price-list", Component: ProductPriceListPage },
       { path: "users", Component: UsersManagementPage },
       { path: "settings", Component: SettingsPage },

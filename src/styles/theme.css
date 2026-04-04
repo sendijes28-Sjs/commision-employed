@@ -147,37 +147,37 @@
 
   h1 {
     font-size: var(--text-2xl);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
     line-height: 1.5;
   }
 
   h2 {
     font-size: var(--text-xl);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
     line-height: 1.5;
   }
 
   h3 {
     font-size: var(--text-lg);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
     line-height: 1.5;
   }
 
   h4 {
     font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
     line-height: 1.5;
   }
 
   label {
     font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: 500;
     line-height: 1.5;
   }
 
   button {
     font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: 500;
     line-height: 1.5;
   }
 
@@ -185,5 +185,24 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+
+  /* Minimalist Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #cbd5e1;
   }
 }
