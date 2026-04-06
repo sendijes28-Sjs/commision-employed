@@ -38,7 +38,7 @@ Pastikan **Node.js** terinstal pada perangkat Anda.
 
 1. **Clone repository ini:**
    ```bash
-   git clone <repo_url>
+   git clone (https://github.com/apawardhana/commision-employe.git)
    cd Commision-Employee
    ```
 
