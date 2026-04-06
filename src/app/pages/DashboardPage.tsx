@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, FileText, AlertCircle, TrendingUp, ShieldCheck, Clock, Users, AlertTriangle, ArrowUpRight, LayoutGrid, Activity, Sparkles, Wallet, PieChart, BarChart3, ChevronRight, Globe, Fingerprint, BadgeCheck, XCircle, Search, ChevronDown } from "lucide-react";
+import { DollarSign, FileText, AlertCircle, TrendingUp, ShieldCheck, Clock, Users, AlertTriangle, ArrowUpRight, LayoutGrid, Activity, Sparkles, Wallet, PieChart, BarChart3, ChevronRight, Globe, Fingerprint, BadgeCheck, XCircle, Search, ChevronDown, Calendar, Filter } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
@@ -23,7 +23,9 @@ export function DashboardPage() {
   const [rejectedCount, setRejectedCount] = useState(0);
   const [teamStats, setTeamStats] = useState<any[]>([]);
 
-  const [dailyTarget, setDailyTarget] = useState(0);
+  const [targetLelang, setTargetLelang] = useState(0);
+  const [targetUser, setTargetUser] = useState(0);
+  const [teamTodaySales, setTeamTodaySales] = useState(0);
   const [todaySales, setTodaySales] = useState(0);
   const [userBreakdown, setUserBreakdown] = useState<any[]>([]);
   const [userTimeSeries, setUserTimeSeries] = useState<any[]>([]);
@@ -31,13 +33,16 @@ export function DashboardPage() {
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         const [statsRes, invRes, settingsRes] = await Promise.all([
-          axios.get(`${API_URL}/stats`),
-          axios.get(`${API_URL}/invoices?limit=10`),
+          axios.get(`${API_URL}/stats?startDate=${startDate}&endDate=${endDate}`),
+          axios.get(`${API_URL}/invoices?limit=10&startDate=${startDate}&endDate=${endDate}`),
           axios.get(`${API_URL}/settings`)
         ]);
 
@@ -45,7 +50,9 @@ export function DashboardPage() {
         const summary = statsData.summary || [];
         const settings = settingsRes.data || {};
 
-        setDailyTarget(statsData.dailyTarget || 0);
+        setTargetLelang(statsData.targetLelang || 0);
+        setTargetUser(statsData.targetUser || 0);
+        setTeamTodaySales(statsData.teamTodaySales || 0);
         setTodaySales(statsData.todaySales || 0);
         if (isAdmin) {
           setUserBreakdown(statsData.userBreakdown || []);
@@ -114,17 +121,20 @@ export function DashboardPage() {
     };
 
     fetchDashboardData();
-  }, [isAdmin, user?.id, user?.team]);
+  }, [isAdmin, user?.id, user?.team, startDate, endDate]);
 
   useEffect(() => {
     const handleClickOutside = (event: any) => {
       if (isDropdownOpen && !event.target.closest('.user-monitor-dropdown')) {
         setIsDropdownOpen(false);
       }
+      if (isDateDropdownOpen && !event.target.closest('.date-filter-dropdown')) {
+        setIsDateDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isDropdownOpen]);
+  }, [isDropdownOpen, isDateDropdownOpen]);
 
   const filteredMembers = useMemo(() => {
     return userBreakdown
@@ -132,15 +142,51 @@ export function DashboardPage() {
       .filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [userBreakdown, searchTerm, user?.id]);
 
+  const rankingsMembers = useMemo(() => {
+    let list = userBreakdown
+      .filter(u => u.role !== 'admin' && u.role !== 'super_admin');
+    
+    if (selectedUserId === 'team_Lelang') {
+      list = list.filter(u => u.team === 'Lelang');
+    } else if (selectedUserId === 'team_User') {
+      list = list.filter(u => u.team === 'User');
+    } else if (selectedUserId !== 'all') {
+      // filtering by individual user
+      list = list.filter(u => u.id.toString() === selectedUserId);
+    }
+    
+    return list.sort((a, b) => Number(b.total_sales) - Number(a.total_sales));
+  }, [userBreakdown, selectedUserId]);
+
   const selectedUser = useMemo(() => {
     if (selectedUserId === "all") return null;
     return userBreakdown.find(u => u.id.toString() === selectedUserId);
   }, [selectedUserId, userBreakdown]);
 
+  const dateRangeLabel = useMemo(() => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (startDate === endDate) {
+      if (startDate === new Date().toISOString().split('T')[0]) return "Today";
+      return start.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    }
+    return `${start.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })} - ${end.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}`;
+  }, [startDate, endDate]);
+
   const filteredChartData = useMemo(() => {
     if (!isAdmin || selectedUserId === "all") return chartData;
+    
     const userSalesByDate: Record<string, number> = {};
-    const filteredSeries = userTimeSeries.filter(pts => pts.user_id.toString() === selectedUserId);
+    let filteredSeries = [];
+    
+    if (selectedUserId === "team_Lelang") {
+      filteredSeries = userTimeSeries.filter(pts => pts.team === "Lelang");
+    } else if (selectedUserId === "team_User") {
+      filteredSeries = userTimeSeries.filter(pts => pts.team === "User");
+    } else {
+      filteredSeries = userTimeSeries.filter(pts => pts.user_id.toString() === selectedUserId);
+    }
+    
     if (filteredSeries.length === 0) return [{ date: 'No Data', sales: 0 }];
     filteredSeries.forEach(pts => {
       const d = pts.date?.substring(0, 10);
@@ -161,67 +207,259 @@ export function DashboardPage() {
     );
   }
 
-  const targetProgress = dailyTarget > 0 ? (todaySales / dailyTarget) * 100 : 0;
-  const isTargetAchieved = targetProgress >= 100;
+  // Build stat cards
+  const statCards: any[] = [];
+  
+  if (isAdmin) {
+    let salesAmt = 0;
+    let targetAmt = 0;
+    let label = "Total Revenue";
+    
+    if (selectedUserId === 'team_Lelang') {
+       salesAmt = teamStats.find(t => t.team === 'Lelang')?.total_sales || 0;
+       targetAmt = targetLelang;
+       label = "Lelang Revenue";
+    } else if (selectedUserId === 'team_User') {
+       salesAmt = teamStats.find(t => t.team === 'User')?.total_sales || 0;
+       targetAmt = targetUser;
+       label = "User Revenue";
+    } else if (selectedUserId === 'all') {
+       salesAmt = todaySales;
+       targetAmt = targetLelang + targetUser;
+       label = "Overall Revenue";
+    } else {
+       const userD = userBreakdown.find(u => u.id.toString() === selectedUserId);
+       salesAmt = userD ? Number(userD.total_sales) : 0;
+       targetAmt = 0; // No target for individual
+       label = `${userD?.name?.split(" ")[0]}'s Revenue` || "Revenue";
+    }
+    
+    statCards.push({ 
+       label: label, 
+       value: targetAmt > 0 ? `Rp ${salesAmt.toLocaleString("id-ID")} / ${targetAmt.toLocaleString("id-ID")}` : `Rp ${salesAmt.toLocaleString("id-ID")}`, 
+       progress: targetAmt > 0 ? (salesAmt/targetAmt)*100 : undefined, 
+       icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" 
+    });
+  } else {
+    // Non-admin shows their team's target
+    const myTarget = user?.team === 'Lelang' ? targetLelang : (user?.team === 'User' ? targetUser : 0);
+    if (myTarget > 0) {
+      statCards.push({ label: `Team ${user?.team} Target`, value: `Rp ${teamTodaySales.toLocaleString("id-ID")} / ${myTarget.toLocaleString("id-ID")}`, progress: (teamTodaySales/myTarget)*100, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" });
+    }
+  }
 
-  // Build stat cards (Progressive disclosure: reduced density)
-  const statCards = [
-    { label: "Awaiting Payout", value: `Rp ${unpaidCommission.toLocaleString("id-ID")}`, icon: Wallet, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
-    { label: "Total Paid", value: `Rp ${paidCommission.toLocaleString("id-ID")}`, icon: BadgeCheck, color: "text-primary", bg: "bg-blue-50", border: "border-blue-100" },
+  statCards.push(
+    { label: "Awaiting Payout", value: `Rp ${unpaidCommission.toLocaleString("id-ID")}`, icon: Wallet, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+    { label: "Total Paid", value: `Rp ${paidCommission.toLocaleString("id-ID")}`, icon: BadgeCheck, color: "text-primary", bg: "bg-primary/10", border: "border-primary/20" },
     { label: "Pending Review", value: pendingCount, icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" },
-    { label: "Rejected", value: rejectedCount, icon: XCircle, color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" },
-  ];
+    { label: "Rejected", value: rejectedCount, icon: XCircle, color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" }
+  );
 
   return (
     <div className="space-y-6 pb-10 max-w-7xl mx-auto">
       {/* Header — greeting style */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            {getGreeting()}, {user?.name?.split(" ")[0]} 👋
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {isAdmin ? "Here's your company performance overview." : "Here's your commission performance."}
-          </p>
-        </div>
-
-        {/* Daily Target Progress — horizontal bar version */}
-        {dailyTarget > 0 && (
-          <div className="flex items-center gap-4 bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Daily Target</p>
-              <p className="text-sm font-semibold text-slate-900 mt-0.5">
-                Rp {todaySales.toLocaleString("id-ID")} <span className="text-slate-400 font-normal">/ {dailyTarget.toLocaleString("id-ID")}</span>
-              </p>
-            </div>
-            <div className="w-24">
-              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-1000 ease-out ${isTargetAchieved ? "bg-emerald-500" : "bg-primary"}`}
-                  style={{ width: `${Math.min(targetProgress, 100)}%` }}
-                />
-              </div>
-              <p className={`text-[10px] font-semibold mt-1 text-right ${isTargetAchieved ? "text-emerald-600" : "text-primary"}`}>
-                {Math.floor(targetProgress)}%
-              </p>
-            </div>
-          </div>
-        )}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          {getGreeting()}, {user?.name?.split(" ")[0]}
+        </h1>
+        <p className="text-sm text-slate-500">
+          {isAdmin ? "Here's your company performance overview." : "Here's your commission performance."}
+        </p>
       </div>
 
-      {/* Stat Cards — 4 column max */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        {statCards.map((card, idx) => (
-          <div key={idx} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`w-9 h-9 rounded-lg ${card.bg} ${card.color} flex items-center justify-center border ${card.border}`}>
-                <card.icon className="w-4 h-4" />
+      {/* Toolbar / Filters */}
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date Filter Dropdown */}
+          <div className="relative date-filter-dropdown">
+            <button
+              onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-slate-300 transition-all active:scale-[0.98] text-slate-600"
+            >
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-700">{dateRangeLabel}</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ml-2 ${isDateDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isDateDropdownOpen && (
+              <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-2xl border border-slate-100 shadow-2xl z-[100] p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: 'Today', onClick: () => { const t = new Date().toISOString().split('T')[0]; setStartDate(t); setEndDate(t); setIsDateDropdownOpen(false); } },
+                      { label: 'Yesterday', onClick: () => { const y = new Date(); y.setDate(y.getDate() - 1); const d = y.toISOString().split('T')[0]; setStartDate(d); setEndDate(d); setIsDateDropdownOpen(false); } },
+                      { label: 'Last 7 Days', onClick: () => { const s = new Date(); s.setDate(s.getDate() - 7); setStartDate(s.toISOString().split('T')[0]); setEndDate(new Date().toISOString().split('T')[0]); setIsDateDropdownOpen(false); } },
+                      { label: 'This Month', onClick: () => { const s = new Date(); s.setDate(1); setStartDate(s.toISOString().split('T')[0]); setEndDate(new Date().toISOString().split('T')[0]); setIsDateDropdownOpen(false); } },
+                    ].map((preset) => (
+                      <button
+                        key={preset.label}
+                        onClick={preset.onClick}
+                        className="px-3 py-2 text-[11px] font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors text-center"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2.5 pt-2 border-t border-slate-50">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Custom Range</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <p className="text-[9px] font-medium text-slate-400 mb-1 ml-1">Start Date</p>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:border-primary outline-none transition-all"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[9px] font-medium text-slate-400 mb-1 ml-1">End Date</p>
+                        <input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:border-primary outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsDateDropdownOpen(false)}
+                      className="w-full py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-all mt-2"
+                    >
+                      Apply Filter
+                    </button>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs font-medium text-slate-500">{card.label}</p>
+            )}
+          </div>
+
+          {/* Member filter dropdown (Admin only) */}
+          {isAdmin && (
+            <div className="relative user-monitor-dropdown">
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-slate-300 transition-all active:scale-[0.98]"
+              >
+                <div className={`w-5 h-5 rounded bg-slate-900 text-white flex items-center justify-center text-[8px] font-bold ${selectedUserId !== 'all' && !selectedUserId.startsWith('team_') ? 'ring-2 ring-primary ring-offset-1' : ''}`}>
+                  {selectedUserId === 'all' || selectedUserId.startsWith('team_') ? <Users className="w-3 h-3" /> : selectedUser?.name?.split(" ").map((n: string) => n[0]).join("")}
+                </div>
+                <span className="text-xs font-semibold text-slate-700 ml-1">
+                  {selectedUserId === 'all' ? 'All Teams' : selectedUserId === 'team_Lelang' ? 'Team Lelang' : selectedUserId === 'team_User' ? 'Team User' : selectedUser?.name}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ml-2 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isDropdownOpen && (
+                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl border border-slate-100 shadow-xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-2.5 border-b border-slate-50">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Search member..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-medium text-slate-900 focus:border-primary transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-[280px] overflow-y-auto p-1.5 space-y-0.5">
+                    <button
+                      onClick={() => { setSelectedUserId("all"); setIsDropdownOpen(false); }}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedUserId === 'all' ? 'bg-primary text-white' : 'hover:bg-slate-50 text-slate-900'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center ${selectedUserId === 'all' ? 'bg-white/20' : 'bg-slate-100'}`}>
+                          <Users className="w-3 h-3" />
+                        </div>
+                        <span className="text-xs font-semibold">All Teams</span>
+                      </div>
+                      {selectedUserId === 'all' && <BadgeCheck className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <button
+                      onClick={() => { setSelectedUserId("team_Lelang"); setIsDropdownOpen(false); }}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedUserId === 'team_Lelang' ? 'bg-primary text-white' : 'hover:bg-slate-50 text-slate-900'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center ${selectedUserId === 'team_Lelang' ? 'bg-white/20' : 'bg-slate-100'}`}>
+                          <Users className="w-3 h-3" />
+                        </div>
+                        <span className="text-xs font-semibold">Team Lelang</span>
+                      </div>
+                      {selectedUserId === 'team_Lelang' && <BadgeCheck className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <button
+                      onClick={() => { setSelectedUserId("team_User"); setIsDropdownOpen(false); }}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedUserId === 'team_User' ? 'bg-primary text-white' : 'hover:bg-slate-50 text-slate-900'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center ${selectedUserId === 'team_User' ? 'bg-white/20' : 'bg-slate-100'}`}>
+                          <Users className="w-3 h-3" />
+                        </div>
+                        <span className="text-xs font-semibold">Team User</span>
+                      </div>
+                      {selectedUserId === 'team_User' && <BadgeCheck className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider px-2 pt-2 pb-1">Members</p>
+
+                    {filteredMembers.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => { setSelectedUserId(m.id.toString()); setIsDropdownOpen(false); }}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${selectedUserId === m.id.toString() ? 'bg-primary text-white' : 'hover:bg-slate-50 text-slate-900'}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded flex items-center justify-center text-[8px] font-bold ${selectedUserId === m.id.toString() ? 'bg-white/20' : 'bg-slate-900 text-white'}`}>
+                            {m.name?.split(" ").map((n: string) => n[0]).join("")}
+                          </div>
+                          <div className="text-left">
+                            <p className="text-xs font-semibold leading-none">{m.name}</p>
+                            <span className={`text-[9px] font-medium ${selectedUserId === m.id.toString() ? 'text-white/60' : 'text-slate-400'}`}>
+                              {m.team}
+                            </span>
+                          </div>
+                        </div>
+                        {selectedUserId === m.id.toString() && <BadgeCheck className="w-3.5 h-3.5" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <p className={`text-lg font-semibold ${card.color} tracking-tight truncate font-mono`}>
+          )}
+        </div>
+
+        <div className="hidden md:flex items-center gap-2 text-[10px] font-medium text-slate-400">
+           <Activity className="w-3 h-3 text-emerald-500" />
+           <span>Dashboard Live Overview</span>
+        </div>
+      </div>
+
+      {/* Stat Cards — 5 columns for compactness */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+        {statCards.map((card, idx) => (
+          <div key={idx} className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+            <div className="flex items-center gap-2.5 mb-2.5">
+              <div className={`w-8 h-8 rounded-lg ${card.bg} ${card.color} flex items-center justify-center border ${card.border}`}>
+                <card.icon className="w-3.5 h-3.5" />
+              </div>
+              <p className="text-[11px] font-medium text-slate-500">{card.label}</p>
+            </div>
+            <p className={`text-sm md:text-base font-semibold ${card.color} tracking-tight truncate font-mono`}>
               {card.value}
             </p>
+            {card.progress !== undefined && (
+               <div className="w-full mt-2 h-1 bg-slate-100 rounded-full overflow-hidden">
+                 <div className={`h-full rounded-full transition-all duration-1000 ease-out ${card.progress >= 100 ? "bg-emerald-500" : "bg-primary"}`} style={{ width: `${Math.min(card.progress, 100)}%` }} />
+               </div>
+            )}
           </div>
         ))}
       </div>
@@ -236,92 +474,6 @@ export function DashboardPage() {
                 <h2 className="text-base font-semibold text-slate-900">Sales Activity</h2>
                 <p className="text-xs text-slate-400 mt-0.5">Daily revenue trend</p>
               </div>
-
-              {/* Member filter dropdown (Admin only) */}
-              {isAdmin && (
-                <div className="relative user-monitor-dropdown">
-                  <button
-                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="flex items-center gap-2.5 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-slate-300 transition-all active:scale-[0.98]"
-                  >
-                    <div className={`w-6 h-6 rounded-md bg-slate-900 text-white flex items-center justify-center text-[9px] font-bold ${selectedUserId !== 'all' ? 'ring-2 ring-primary ring-offset-1' : ''}`}>
-                      {selectedUserId === 'all' ? <Users className="w-3 h-3" /> : selectedUser?.name?.split(" ").map((n: string) => n[0]).join("")}
-                    </div>
-                    <div className="text-left pr-2">
-                      <p className="text-[10px] font-medium text-slate-400">Monitoring</p>
-                      <p className="text-xs font-semibold text-slate-900 leading-none truncate max-w-[100px]">
-                        {selectedUserId === 'all' ? 'All Teams' : selectedUser?.name}
-                      </p>
-                    </div>
-                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {isDropdownOpen && (
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-xl border border-slate-100 shadow-xl z-[99] overflow-hidden">
-                      {/* Search */}
-                      <div className="p-2.5 border-b border-slate-50">
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                          <input
-                            autoFocus
-                            type="text"
-                            placeholder="Search member..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-medium text-slate-900 focus:border-primary transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="max-h-[280px] overflow-y-auto p-1.5 space-y-0.5">
-                        {/* All teams option */}
-                        <button
-                          onClick={() => { setSelectedUserId("all"); setIsDropdownOpen(false); }}
-                          className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all ${selectedUserId === 'all' ? 'bg-primary text-white' : 'hover:bg-slate-50 text-slate-900'}`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-7 h-7 rounded-md flex items-center justify-center ${selectedUserId === 'all' ? 'bg-white/20' : 'bg-slate-100'}`}>
-                              <Users className="w-3.5 h-3.5" />
-                            </div>
-                            <span className="text-xs font-semibold">All Teams</span>
-                          </div>
-                          {selectedUserId === 'all' && <BadgeCheck className="w-4 h-4" />}
-                        </button>
-
-                        {/* Section label */}
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2.5 pt-2 pb-1">Members</p>
-
-                        {filteredMembers.length === 0 ? (
-                          <div className="p-6 text-center">
-                            <p className="text-xs text-slate-400">No members found</p>
-                          </div>
-                        ) : (
-                          filteredMembers.map(m => (
-                            <button
-                              key={m.id}
-                              onClick={() => { setSelectedUserId(m.id.toString()); setIsDropdownOpen(false); }}
-                              className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all ${selectedUserId === m.id.toString() ? 'bg-primary text-white' : 'hover:bg-slate-50 text-slate-900'}`}
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <div className={`w-7 h-7 rounded-md flex items-center justify-center text-[9px] font-bold ${selectedUserId === m.id.toString() ? 'bg-white/20' : 'bg-slate-900 text-white'}`}>
-                                  {m.name?.split(" ").map((n: string) => n[0]).join("")}
-                                </div>
-                                <div className="text-left">
-                                  <p className="text-xs font-semibold leading-none">{m.name}</p>
-                                  <span className={`text-[10px] font-medium ${selectedUserId === m.id.toString() ? 'text-white/60' : 'text-slate-400'}`}>
-                                    {m.team}
-                                  </span>
-                                </div>
-                              </div>
-                              {selectedUserId === m.id.toString() && <BadgeCheck className="w-4 h-4" />}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Chart */}
@@ -374,7 +526,7 @@ export function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {userBreakdown.map((u, i) => (
+                    {rankingsMembers.map((u, i) => (
                       <tr key={u.id} className="group hover:bg-slate-50/50 transition-colors">
                         <td className="py-3">
                           <div className="flex items-center gap-2.5">
@@ -414,8 +566,8 @@ export function DashboardPage() {
           <div className="bg-slate-900 rounded-xl p-5 text-white shadow-sm flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-semibold text-white">Recent Activity</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Latest invoices</p>
+                <h3 className="text-sm font-semibold text-white">Invoices Activity</h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">{dateRangeLabel}</p>
               </div>
               <Link to="/invoices" className="w-7 h-7 bg-white/5 rounded-lg flex items-center justify-center hover:bg-primary transition-all border border-white/5">
                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -457,7 +609,6 @@ export function DashboardPage() {
               View All Activity <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-
         </div>
       </div>
     </div>

@@ -35,6 +35,8 @@ export function CreateInvoicePage() {
   const [verification, setVerification] = useState<any>(null);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isSuperAdmin = user?.role === 'super_admin';
+  const itemsLocked = uploadSuccess && !isSuperAdmin;
 
   const { register, control, handleSubmit, setValue, watch, reset: resetForm, formState: { errors } } = useForm<InvoiceFormData>({
     resolver: zodResolver(InvoiceSchema) as any,
@@ -77,6 +79,13 @@ export function CreateInvoicePage() {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin && user) {
+      setValue("team", user.team || "");
+      setValue("userId", String(user.id || ""));
+    }
+  }, [isAdmin, user, setValue]);
 
   // Build a normalized lookup map once from the products array
   const productMap = useMemo(() => {
@@ -126,7 +135,7 @@ export function CreateInvoicePage() {
       setValue("invoiceNumber", result.invoiceNumber || "");
       setValue("date", result.date || new Date().toISOString().split("T")[0]);
       setValue("customerName", result.customerName || "");
-      setValue("team", "Lelang");
+      // Removed generic 'Lelang' assignment here since it should either be auto-filled from the user (non-admin) or manually selected (admin)
       if (result.items && result.items.length > 0) {
         remove();
         result.items.forEach((item: any, idx: number) => {
@@ -273,7 +282,8 @@ export function CreateInvoicePage() {
                 <label className="text-[8px] font-semibold uppercase tracking-wide text-slate-400 ml-1 opacity-70">Team</label>
                 <select
                   {...register("team")}
-                  className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-lg outline-none focus:border-primary transition-all font-semibold text-[10px] appearance-none"
+                  disabled={!isAdmin}
+                  className={`w-full px-4 py-2.5 ${!isAdmin ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/50'} border border-slate-100 rounded-lg outline-none focus:border-primary transition-all font-semibold text-[10px] appearance-none`}
                 >
                   <option value="">Select Team...</option>
                   <option value="Lelang">Lelang</option>
@@ -285,7 +295,8 @@ export function CreateInvoicePage() {
                 <label className="text-[8px] font-semibold uppercase tracking-wide text-slate-400 ml-1 opacity-70">User</label>
                 <select
                   {...register("userId")}
-                  className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-100 rounded-lg outline-none focus:border-primary transition-all font-semibold text-[10px] appearance-none"
+                  disabled={!isAdmin}
+                  className={`w-full px-4 py-2.5 ${!isAdmin ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/50'} border border-slate-100 rounded-lg outline-none focus:border-primary transition-all font-semibold text-[10px] appearance-none`}
                 >
                   <option value="">Select User...</option>
                   {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -310,13 +321,15 @@ export function CreateInvoicePage() {
                 <div className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-semibold text-[10px]">02</div>
                 <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Invoice Items</h2>
               </div>
-              <button
-                type="button"
-                onClick={() => append({ id: Date.now().toString(), productName: "", quantity: 1, price: 0, bottomPrice: 0 })}
-                className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all font-semibold uppercase tracking-wide text-[8px] flex items-center gap-2 active:scale-95"
-              >
-                <Plus className="w-3 h-3" /> Add Item
-              </button>
+              {!itemsLocked && (
+                <button
+                  type="button"
+                  onClick={() => append({ id: Date.now().toString(), productName: "", quantity: 1, price: 0, bottomPrice: 0 })}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all font-semibold uppercase tracking-wide text-[8px] flex items-center gap-2 active:scale-95"
+                >
+                  <Plus className="w-3 h-3" /> Add Item
+                </button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-separate border-spacing-y-1.5 px-3 pb-3">
@@ -338,7 +351,8 @@ export function CreateInvoicePage() {
                              {...register(`items.${index}.productName`)}
                              list="products-list"
                              onBlur={() => handleProductBlur(index)}
-                             className="bg-transparent border-none focus:ring-0 w-full p-0 font-semibold text-slate-900 text-xs placeholder:text-slate-300"
+                             readOnly={itemsLocked}
+                             className={`bg-transparent border-none focus:ring-0 w-full p-0 font-semibold text-slate-900 text-xs placeholder:text-slate-300 ${itemsLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
                              placeholder="Product..."
                            />
                            <span className="text-[7px] font-semibold text-slate-400 mt-0.5 uppercase tracking-wide opacity-70">Product Name</span>
@@ -349,7 +363,8 @@ export function CreateInvoicePage() {
                            <input
                              {...register(`items.${index}.quantity`, { valueAsNumber: true })}
                              type="number"
-                             className="w-full bg-white border border-slate-200 rounded px-1.5 py-1.5 text-center font-semibold text-slate-900 outline-none text-[10px]"
+                             readOnly={itemsLocked}
+                             className={`w-full bg-white border border-slate-200 rounded px-1.5 py-1.5 text-center font-semibold text-slate-900 outline-none text-[10px] ${itemsLocked ? 'bg-slate-50 cursor-not-allowed' : ''}`}
                            />
                           </div>
                         </td>
@@ -359,7 +374,8 @@ export function CreateInvoicePage() {
                            <input
                               {...register(`items.${index}.price`, { valueAsNumber: true })}
                               type="number"
-                              className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded font-semibold text-slate-900 outline-none text-[10px]"
+                              readOnly={itemsLocked}
+                              className={`w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded font-semibold text-slate-900 outline-none text-[10px] ${itemsLocked ? 'bg-slate-50 cursor-not-allowed' : ''}`}
                             />
                              {isAdmin && (
                                <div className="absolute -bottom-3 left-1 flex items-center gap-1">
@@ -375,13 +391,15 @@ export function CreateInvoicePage() {
                         <p className="text-[7px] font-semibold text-slate-400 uppercase tracking-wide mt-0.5 opacity-50">Subtotal</p>
                       </td>
                       <td className="px-3 py-3 rounded-r-lg">
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!itemsLocked && (
+                          <button
+                            type="button"
+                            onClick={() => remove(index)}
+                            className="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

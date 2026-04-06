@@ -99,7 +99,8 @@ export function Sidebar() {
           {!collapsed && (
             <div className="min-w-0">
               <h1 className="text-sm font-semibold text-white tracking-tight leading-none truncate">
-                Glory<span className="text-primary/80"> Comm</span>
+                Glory<span className="text-primary/80"> Commission</span><br></br>
+                <span className="text-primary/80" > System</span>
               </h1>
             </div>
           )}

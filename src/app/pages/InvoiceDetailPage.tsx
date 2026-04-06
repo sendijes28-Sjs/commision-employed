@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "../components/PageHeader";
-import { Link, useParams, useNavigate } from "react-router";
+import { Link, useParams, useNavigate, useLocation } from "react-router";
 import { ArrowLeft, Printer, AlertTriangle, CheckCircle2, Clock, XCircle, Loader2, FileText, BadgeCheck, Hash, Calendar, Users, Briefcase, Activity, ListFilter, ShieldCheck, Download, Trash2, Edit, ChevronRight, LayoutGrid, DollarSign, Fingerprint, Globe, Check, X } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
@@ -43,6 +43,8 @@ export function InvoiceDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
   const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
+  const location = useLocation();
+  const backPath = location.state?.from || "/invoices";
 
   useEffect(() => {
     if (!id) return setIsLoading(false);
@@ -117,7 +119,7 @@ export function InvoiceDetailPage() {
   if (!invoice) {
     return (
       <div className="space-y-6 max-w-4xl mx-auto py-12">
-        <Link to="/invoices" className="group inline-flex items-center gap-3 text-slate-400 hover:text-primary transition-all font-semibold uppercase tracking-[0.3em] text-[9px]">
+        <Link to={backPath} className="group inline-flex items-center gap-3 text-slate-400 hover:text-primary transition-all font-semibold uppercase tracking-[0.3em] text-[9px]">
            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" /> BACK TO LIST
         </Link>
         <div className="bg-white rounded-2xl p-12 border border-slate-100 shadow-xl shadow-slate-200/50 text-center relative overflow-hidden">
@@ -150,7 +152,7 @@ export function InvoiceDetailPage() {
     <div className="space-y-8 pb-20 max-w-7xl mx-auto">
       {/* Navigation */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-         <Link to="/invoices" className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-100 rounded-lg hover:bg-slate-900 hover:text-white transition-all shadow-sm">
+         <Link to={backPath} className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-100 rounded-lg hover:bg-slate-900 hover:text-white transition-all shadow-sm">
             <ArrowLeft className="w-4 h-4" />
             <span className="font-semibold uppercase tracking-wide text-[8px] opacity-70">Back to List</span>
          </Link>
