@@ -106,6 +106,12 @@ export function ProductPriceListPage() {
   const [headerIndex, setHeaderIndex] = useState(0);
   const [mapping, setMapping] = useState<MappingFields>({ skuCol: -1, nameCol: -1, priceCol: -1, qtyCol: -1 });
 
+  // Import Resolution State
+  const [pendingNewProducts, setPendingNewProducts] = useState<any[]>([]);
+  const [pendingChangedProducts, setPendingChangedProducts] = useState<any[]>([]);
+  const [showBulkUpdateDialog, setShowBulkUpdateDialog] = useState(false);
+  const [showSelectionModal, setShowSelectionModal] = useState(false);
+
   // Product CRUD Modal
   const [showProductModal, setShowProductModal] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
@@ -221,20 +227,57 @@ export function ProductPriceListPage() {
   };
 
   const processImport = async () => {
-    setIsImporting(true);
     setShowMapping(false);
-    try {
-      const productsToImport: any[] = [];
-      const dataRows = csvRows.slice(headerIndex + 1);
-      for (const row of dataRows) {
-        const name = row[mapping.nameCol];
-        if (!name || name.trim() === "") continue;
-        let price = parsePrice(row[mapping.priceCol]);
-        const qty = mapping.qtyCol !== -1 ? parsePrice(row[mapping.qtyCol || -1]) || 1 : 1;
-        if (mapping.qtyCol !== -1 && qty > 0) price = price / qty;
-        productsToImport.push({ sku: mapping.skuCol !== -1 ? row[mapping.skuCol] : null, name: name.trim(), price: Math.floor(price) });
+    const newItems: any[] = [];
+    const changedItems: any[] = [];
+
+    const dataRows = csvRows.slice(headerIndex + 1);
+    for (const row of dataRows) {
+      const name = row[mapping.nameCol];
+      if (!name || name.trim() === "") continue;
+      let price = parsePrice(row[mapping.priceCol]);
+      const qty = mapping.qtyCol !== -1 ? parsePrice(row[mapping.qtyCol || -1]) || 1 : 1;
+      if (mapping.qtyCol !== -1 && qty > 0) price = price / qty;
+      price = Math.floor(price);
+      const sku = mapping.skuCol !== -1 ? row[mapping.skuCol]?.trim() || null : null;
+      const itemName = name.trim();
+
+      // Priority 1: Match by SKU
+      let existingMatch = null;
+      if (sku) existingMatch = products.find(p => p.sku === sku);
+      // Priority 2: Match by exact name if no SKU provided or match fails (match string exactly as done in DB)
+      if (!existingMatch && !sku) existingMatch = products.find(p => p.name === itemName && (!p.sku || p.sku.trim() === ""));
+
+      if (existingMatch) {
+         if (existingMatch.rawPrice !== price) {
+            changedItems.push({ sku, name: itemName, price, oldPrice: existingMatch.rawPrice, isSelected: true });
+         }
+      } else {
+         newItems.push({ sku, name: itemName, price });
       }
-      const res = await axios.post(`${API_URL}/products/import`, { products: productsToImport });
+    }
+
+    if (changedItems.length === 0) {
+      if (newItems.length > 0) {
+        executeFinalImport(newItems);
+      } else {
+        toast.info("Tidak ada data produk atau harga baru.");
+      }
+    } else {
+      setPendingNewProducts(newItems);
+      setPendingChangedProducts(changedItems);
+      setShowBulkUpdateDialog(true);
+    }
+  };
+
+  const executeFinalImport = async (importData: any[]) => {
+    if (importData.length === 0) {
+      toast.info("Tidak ada pembaruan produk yang dilakukan.");
+      return;
+    }
+    setIsImporting(true);
+    try {
+      const res = await axios.post(`${API_URL}/products/import`, { products: importData });
       setImportResult({
         success: true,
         imported: res.data.imported,
@@ -666,6 +709,144 @@ export function ProductPriceListPage() {
                </button>
              </div>
            </div>
+        </div>
+      )}
+      {/* Import Resolution: Bulk Dialog */}
+      {showBulkUpdateDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-md">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 overflow-hidden animate-in zoom-in-95 duration-300">
+             <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-4 mx-auto">
+               <AlertTriangle className="w-6 h-6" />
+             </div>
+             <h3 className="text-lg font-semibold text-center text-slate-900 mb-2">Harga Berubah</h3>
+             <p className="text-sm text-slate-500 text-center mb-6">
+               Terdapat <span className="font-bold text-slate-800">{pendingChangedProducts.length} barang</span> yang sudah ada tetapi memiliki harga baru. Ingin perbarui semua harganya sekaligus?
+             </p>
+             <div className="flex flex-col gap-2">
+               <button 
+                 onClick={() => {
+                   executeFinalImport([...pendingNewProducts, ...pendingChangedProducts]);
+                   setShowBulkUpdateDialog(false);
+                 }}
+                 className="w-full px-4 py-2 bg-primary text-white hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors shadow-sm"
+               >
+                 Iya, Ubah Semua Harga
+               </button>
+               {pendingChangedProducts.length > 1 && (
+                 <button 
+                   onClick={() => {
+                     setShowSelectionModal(true);
+                     setShowBulkUpdateDialog(false);
+                   }}
+                   className="w-full px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                 >
+                   Pilih Harga Secara Manual
+                 </button>
+               )}
+               <button 
+                 onClick={() => {
+                   executeFinalImport(pendingNewProducts);
+                   setShowBulkUpdateDialog(false);
+                 }}
+                 className="w-full px-4 py-2 bg-slate-50 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg text-sm transition-colors border border-slate-200"
+               >
+                 Abaikan (Hanya Impor Barang Baru)
+               </button>
+             </div>
+           </div>
+        </div>
+      )}
+
+      {/* Import Resolution: Manual Selection Modal */}
+      {showSelectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-300 border border-slate-200">
+            <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between">
+               <div>
+                  <h2 className="text-lg font-semibold text-slate-900 tracking-tight leading-none">Pilih Barang yang Mau Diperbarui</h2>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-1 opacity-70">
+                    {pendingChangedProducts.filter(p => p.isSelected).length} dari {pendingChangedProducts.length} dipilih
+                  </p>
+               </div>
+               <button onClick={() => setShowSelectionModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-50 transition-all text-slate-400">
+                 <X className="w-4 h-4" />
+               </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-0">
+               <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-slate-50 sticky top-0 shadow-sm z-10">
+                     <tr className="uppercase tracking-wide font-semibold text-xs text-slate-500">
+                        <th className="py-3 px-4 w-12 text-center">
+                           <input 
+                              type="checkbox" 
+                              checked={pendingChangedProducts.every(p => p.isSelected)}
+                              onChange={(e) => {
+                                 const checked = e.target.checked;
+                                 setPendingChangedProducts(prev => prev.map(p => ({ ...p, isSelected: checked })));
+                              }}
+                              className="w-4 h-4 accent-primary rounded cursor-pointer"
+                           />
+                        </th>
+                        <th className="py-3 px-4">Nama Barang & SKU</th>
+                        <th className="py-3 px-4">Harga Lama</th>
+                        <th className="py-3 px-4 text-emerald-600">Harga Baru</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                     {pendingChangedProducts.map((p, i) => (
+                        <tr key={i} className={`hover:bg-slate-50/50 transition-colors ${p.isSelected ? 'bg-primary/5' : ''}`}>
+                           <td className="py-3 px-4 text-center">
+                              <input 
+                                 type="checkbox" 
+                                 checked={p.isSelected}
+                                 onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setPendingChangedProducts(prev => prev.map((item, idx) => idx === i ? { ...item, isSelected: checked } : item));
+                                 }}
+                                 className="w-4 h-4 accent-primary rounded cursor-pointer"
+                              />
+                           </td>
+                           <td className="py-3 px-4">
+                              <p className="font-semibold text-slate-800">{p.name}</p>
+                              {p.sku && <p className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 inline-block px-1.5 py-0.5 rounded mt-1">{p.sku}</p>}
+                           </td>
+                           <td className="py-3 px-4 font-medium text-slate-500 line-through decoration-rose-500/50">
+                              {formatPrice(p.oldPrice)}
+                           </td>
+                           <td className="py-3 px-4 font-semibold text-emerald-600 bg-emerald-50/30">
+                              {formatPrice(p.price)}
+                           </td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
+            </div>
+
+            <div className="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-400">
+                {pendingNewProducts.length} barang baru akan otomatis ditambahkan.
+              </span>
+              <div className="flex gap-3">
+                 <button 
+                    onClick={() => setShowSelectionModal(false)}
+                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all font-medium"
+                 >
+                    Batal
+                 </button>
+                 <button 
+                    onClick={() => {
+                       const selectedChanged = pendingChangedProducts.filter(p => p.isSelected);
+                       executeFinalImport([...pendingNewProducts, ...selectedChanged]);
+                       setShowSelectionModal(false);
+                    }}
+                    className="px-6 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition-all shadow-sm"
+                 >
+                    Simpan Pilihan
+                 </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
