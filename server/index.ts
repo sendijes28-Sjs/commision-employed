@@ -631,6 +631,8 @@ app.get('/api/invoices', authenticateToken, (req: any, res: any) => {
     const offset = (page - 1) * limit;
     const status = req.query.status as string;
     const search = req.query.search as string;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
 
     const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
     let where = '';
@@ -651,6 +653,16 @@ app.get('/api/invoices', authenticateToken, (req: any, res: any) => {
       where += where ? ' AND' : ' WHERE';
       where += ' (i.invoice_number LIKE ? OR i.customer_name LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
+    }
+    if (startDate) {
+      where += where ? ' AND' : ' WHERE';
+      where += ' i.date >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      where += where ? ' AND' : ' WHERE';
+      where += ' i.date <= ?';
+      params.push(endDate);
     }
 
     const countRow = db.prepare(`SELECT COUNT(*) as total FROM invoices i${where}`).get(...params) as any;
@@ -785,6 +797,9 @@ app.get('/api/stats', authenticateToken, (req: any, res: any) => {
     const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
     const userId = req.user.id;
     const today = new Date().toISOString().split('T')[0];
+    
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
 
     // 1. Get Summary Stats (Approved, Pending, Rejected, Paid)
     let whereInvoices = '';
@@ -792,6 +807,17 @@ app.get('/api/stats', authenticateToken, (req: any, res: any) => {
     if (!isAdmin) {
       whereInvoices = ' WHERE user_id = ?';
       paramsInvoices.push(userId);
+    }
+
+    if (startDate) {
+      whereInvoices += whereInvoices ? ' AND' : ' WHERE';
+      whereInvoices += ' date >= ?';
+      paramsInvoices.push(startDate);
+    }
+    if (endDate) {
+      whereInvoices += whereInvoices ? ' AND' : ' WHERE';
+      whereInvoices += ' date <= ?';
+      paramsInvoices.push(endDate);
     }
     
     const summary = db.prepare(`
@@ -801,23 +827,65 @@ app.get('/api/stats', authenticateToken, (req: any, res: any) => {
       GROUP BY status
     `).all(...paramsInvoices);
 
-    // 2. Get Daily Target & Today's Progress
-    const targetSet = db.prepare('SELECT value FROM settings WHERE key = ?').get('daily_target') as any;
-    const dailyTarget = targetSet ? Number(targetSet.value) : 0;
+    // 2. Get Targets & Period Progress
+    const targetLelangSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('target_lelang') as any;
+    const targetUserSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('target_user') as any;
+    const targetLelang = targetLelangSetting ? Number(targetLelangSetting.value) : 0;
+    const targetUser = targetUserSetting ? Number(targetUserSetting.value) : 0;
     
-    let todaySalesWhere = ' WHERE date = ?';
-    const todaySalesParams: any[] = [today];
+    // For "Today's Achievement" (or selected range's achievement)
+    let periodSalesWhere = '';
+    const periodSalesParams: any[] = [];
+    
+    if (startDate || endDate) {
+      if (startDate) {
+        periodSalesWhere += ' date >= ?';
+        periodSalesParams.push(startDate);
+      }
+      if (endDate) {
+        periodSalesWhere += (periodSalesWhere ? ' AND' : '') + ' date <= ?';
+        periodSalesParams.push(endDate);
+      }
+    } else {
+      periodSalesWhere = ' date = ?';
+      periodSalesParams.push(today);
+    }
+
     if (!isAdmin) {
-      todaySalesWhere += ' AND user_id = ?';
-      todaySalesParams.push(userId);
+      periodSalesWhere += ' AND user_id = ?';
+      periodSalesParams.push(userId);
     }
     
-    const todaySalesData = db.prepare(`
+    const periodSalesData = db.prepare(`
       SELECT SUM(total_amount) as total_sales
       FROM invoices
-      ${todaySalesWhere} AND status != 'Rejected'
-    `).get(...todaySalesParams) as any;
-    const todaySales = todaySalesData ? (Number(todaySalesData.total_sales) || 0) : 0;
+      WHERE (${periodSalesWhere}) AND status != 'Rejected'
+    `).get(...periodSalesParams) as any;
+    const todaySales = periodSalesData ? (Number(periodSalesData.total_sales) || 0) : 0;
+
+    // 2.5 Get Team Period Progress (Target is per team)
+    const userDoc = db.prepare('SELECT team FROM users WHERE id = ?').get(userId) as any;
+    const userTeam = userDoc ? userDoc.team : null;
+    let periodTeamSalesWhere = 'status != \'Rejected\'';
+    const periodTeamSalesParams: any[] = [];
+    if (startDate) {
+      periodTeamSalesWhere += ' AND date >= ?';
+      periodTeamSalesParams.push(startDate);
+    }
+    if (endDate) {
+      periodTeamSalesWhere += ' AND date <= ?';
+      periodTeamSalesParams.push(endDate);
+    }
+    if (!isAdmin && userTeam) {
+      periodTeamSalesWhere += ' AND team = ?';
+      periodTeamSalesParams.push(userTeam);
+    }
+    const teamSalesData = db.prepare(`
+      SELECT SUM(total_amount) as total_sales
+      FROM invoices
+      WHERE ${periodTeamSalesWhere}
+    `).get(...periodTeamSalesParams) as any;
+    const teamTodaySales = teamSalesData ? (Number(teamSalesData.total_sales) || 0) : 0;
 
     // 3. Admin-Only Breakdown
     let teamBreakdown = null;
@@ -825,37 +893,64 @@ app.get('/api/stats', authenticateToken, (req: any, res: any) => {
     let userTimeSeries = null;
 
     if (isAdmin) {
+      let whereAdmin = '';
+      const paramsAdmin: any[] = [];
+      if (startDate) {
+        whereAdmin += ' WHERE date >= ?';
+        paramsAdmin.push(startDate);
+      }
+      if (endDate) {
+        whereAdmin += whereAdmin ? ' AND' : ' WHERE';
+        whereAdmin += ' date <= ?';
+        paramsAdmin.push(endDate);
+      }
+
       teamBreakdown = db.prepare(`
         SELECT team, SUM(total_amount) as total_sales, COUNT(*) as total_invoices
         FROM invoices
+        ${whereAdmin}
         GROUP BY team
-      `).all();
+      `).all(...paramsAdmin);
 
       userBreakdown = db.prepare(`
         SELECT u.id, u.name, u.team, u.role,
-               SUM(i.total_amount) as total_sales, 
+               SUM(CASE WHEN i.id IS NOT NULL THEN i.total_amount ELSE 0 END) as total_sales, 
                COUNT(i.id) as total_invoices
         FROM users u
-        LEFT JOIN invoices i ON u.id = i.user_id
+        LEFT JOIN invoices i ON u.id = i.user_id ${startDate || endDate ? ' AND ' + whereAdmin.replace(' WHERE ', '') : ''}
+        WHERE u.team IN ('Lelang', 'User') AND u.role NOT IN ('admin', 'super_admin')
         GROUP BY u.id, u.name, u.team, u.role
         ORDER BY total_sales DESC
-      `).all();
+      `).all(...paramsAdmin);
 
       // Time series per user for comparative charts
+      let whereSeries = ' WHERE i.status != \'Rejected\'';
+      const paramsSeries: any[] = [];
+      if (startDate) {
+        whereSeries += ' AND i.date >= ?';
+        paramsSeries.push(startDate);
+      }
+      if (endDate) {
+        whereSeries += ' AND i.date <= ?';
+        paramsSeries.push(endDate);
+      }
+
       userTimeSeries = db.prepare(`
-        SELECT i.user_id, u.name, u.role, i.date, SUM(i.total_amount) as daily_sales
+        SELECT i.user_id, u.name, u.team, u.role, i.date, SUM(i.total_amount) as daily_sales
         FROM invoices i
         JOIN users u ON i.user_id = u.id
-        WHERE i.status != 'Rejected'
-        GROUP BY i.user_id, i.date, u.role
+        ${whereSeries}
+        GROUP BY i.user_id, i.date, u.team, u.role
         ORDER BY i.date ASC
-      `).all();
+      `).all(...paramsSeries);
     }
 
     res.json({ 
       summary,
-      dailyTarget,
+      targetLelang,
+      targetUser,
       todaySales,
+      teamTodaySales,
       teamBreakdown,
       userBreakdown,
       userTimeSeries

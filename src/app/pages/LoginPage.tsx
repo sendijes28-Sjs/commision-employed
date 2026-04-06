@@ -45,7 +45,7 @@ export function LoginPage() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <ShieldCheck className="w-5 h-5 text-white" />
             </div>
-            <span className="text-sm font-semibold tracking-tighter italic">Aneka Delapan Dekorasi</span>
+            <span className="text-sm font-semibold tracking-tighter italic">PT. Aneka Delapan Dekorasi</span>
           </div>
 
           <div className="relative z-10 space-y-4">

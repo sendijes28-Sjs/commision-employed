@@ -221,7 +221,7 @@ export function InvoiceValidationPage() {
                           ) : (
                             <StatusBadge status={inv.status} />
                           )}
-                          <Link to={`/invoices/${inv.number}`} className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 hover:text-primary hover:bg-blue-50 transition-all">
+                          <Link to={`/invoices/${inv.number}`} state={{ from: "/invoice-validation" }} className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 hover:text-primary hover:bg-blue-50 transition-all">
                             <Eye className="w-4 h-4" />
                           </Link>
                         </div>
@@ -299,6 +299,7 @@ export function InvoiceValidationPage() {
                   )}
                   <Link
                     to={`/invoices/${inv.number}`}
+                    state={{ from: "/invoice-validation" }}
                     className={`flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-900 hover:text-white transition-all ${inv.status === 'pending' && !isUserRole ? 'w-10 h-9 bg-slate-50' : 'w-full py-2 bg-slate-50 text-xs font-medium gap-2'}`}
                   >
                     {!isUserRole && inv.status === 'pending' ? <Eye className="w-4 h-4" /> : <><Eye className="w-3.5 h-3.5" /> View Details</>}

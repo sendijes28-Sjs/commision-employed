@@ -19,7 +19,8 @@ export function SettingsPage() {
     lelang_commission: "3.0",
     user_commission: "3.0",
     default_commission: "3.0",
-    daily_target: "0"
+    target_lelang: "0",
+    target_user: "0"
   });
 
   // Change password state
@@ -343,26 +344,49 @@ export function SettingsPage() {
                     </div>
 
                     <div className="space-y-6">
-                       <div className="p-5 bg-slate-900 rounded-xl text-white relative overflow-hidden group">
-                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                             <TrendingUp className="w-20 h-20" />
-                          </div>
-                          <div className="relative z-10">
-                            <h4 className="text-[10px] font-semibold uppercase tracking-wide text-primary mb-1">Daily Sales Target</h4>
-                            <p className="text-[8px] text-white/50 font-medium mb-4 opacity-70 text-balance">The global daily revenue goal for the entire company. Dashboard will track progress against this value.</p>
-                             <div className="flex items-end gap-3 max-w-xs">
-                                <div className="text-2xl font-bold text-white tracking-tight self-center mb-1">Rp</div>
-                                <input
-                                   type="number"
-                                   step="1000"
-                                   value={settings.daily_target}
-                                   onChange={(e) => setSettings({ ...settings, daily_target: e.target.value })}
-                                   className="flex-1 bg-transparent border-b border-white/20 focus:border-primary outline-none py-1 text-2xl font-bold text-white placeholder:text-white/10 transition-all"
-                                   placeholder="0"
-                                />
-                             </div>
-                          </div>
-                       </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <div className="p-5 bg-slate-900 rounded-xl text-white relative overflow-hidden group">
+                              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                 <TrendingUp className="w-16 h-16" />
+                              </div>
+                              <div className="relative z-10">
+                                <h4 className="text-[10px] font-semibold uppercase tracking-wide text-primary mb-1">Target Lelang</h4>
+                                <p className="text-[8px] text-white/50 font-medium mb-4 opacity-70 text-balance">The daily revenue goal for the Lelang division.</p>
+                                 <div className="flex items-end gap-3 max-w-[200px]">
+                                    <div className="text-xl font-bold text-white tracking-tight self-center mb-1">Rp</div>
+                                    <input
+                                       type="number"
+                                       step="1000"
+                                       value={settings.target_lelang}
+                                       onChange={(e) => setSettings({ ...settings, target_lelang: e.target.value })}
+                                       className="flex-1 w-full bg-transparent border-b border-white/20 focus:border-primary outline-none py-1 text-xl font-bold text-white placeholder:text-white/10 transition-all font-mono"
+                                       placeholder="0"
+                                    />
+                                 </div>
+                              </div>
+                           </div>
+
+                           <div className="p-5 bg-slate-900 rounded-xl text-white relative overflow-hidden group">
+                              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                 <TrendingUp className="w-16 h-16" />
+                              </div>
+                              <div className="relative z-10">
+                                <h4 className="text-[10px] font-semibold uppercase tracking-wide text-primary mb-1">Target User</h4>
+                                <p className="text-[8px] text-white/50 font-medium mb-4 opacity-70 text-balance">The daily revenue goal for the User division.</p>
+                                 <div className="flex items-end gap-3 max-w-[200px]">
+                                    <div className="text-xl font-bold text-white tracking-tight self-center mb-1">Rp</div>
+                                    <input
+                                       type="number"
+                                       step="1000"
+                                       value={settings.target_user}
+                                       onChange={(e) => setSettings({ ...settings, target_user: e.target.value })}
+                                       className="flex-1 w-full bg-transparent border-b border-white/20 focus:border-primary outline-none py-1 text-xl font-bold text-white placeholder:text-white/10 transition-all font-mono"
+                                       placeholder="0"
+                                    />
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
 
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative">
                           <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] rounded-xl z-20 flex items-center justify-center">

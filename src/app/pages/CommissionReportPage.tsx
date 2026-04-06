@@ -13,6 +13,7 @@ interface CommissionEntry {
   id: number;
   invoiceNum: string;
   custName: string;
+  userName: string;
   team: string;
   sales: string;
   percentage: string;
@@ -30,6 +31,8 @@ export function CommissionReportPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
+  const [teamFilter, setTeamFilter] = useState("all");
+  const [userFilter, setUserFilter] = useState("all");
 
   // Payout State
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -67,6 +70,7 @@ export function CommissionReportPage() {
           id: inv.id,
           invoiceNum: inv.invoice_number,
           custName: inv.customer_name,
+          userName: inv.user_name || "Unknown",
           team: inv.team,
           sales: "Rp " + salesAmt.toLocaleString("id-ID"),
           percentage: perc + "%",
@@ -96,10 +100,17 @@ export function CommissionReportPage() {
   const filtered = commissions.filter(c => {
     const matchSearch =
       c.invoiceNum.toLowerCase().includes(search.toLowerCase()) ||
-      c.custName.toLowerCase().includes(search.toLowerCase());
+      c.custName.toLowerCase().includes(search.toLowerCase()) ||
+      c.userName.toLowerCase().includes(search.toLowerCase());
     const matchMonth = monthFilter === "" || c.date.startsWith(monthFilter);
-    return matchSearch && matchMonth;
+    const matchTeam = teamFilter === "all" || c.team === teamFilter;
+    const matchUser = userFilter === "all" || String(c.userId) === userFilter;
+    return matchSearch && matchMonth && matchTeam && matchUser;
   });
+
+  const uniqueUsers = Array.from(new Set(commissions.map(c => c.userId)))
+    .map(id => commissions.find(c => c.userId === id))
+    .filter(Boolean);
 
   const totalPaidAmt = filtered
     .filter(c => c.status.toLowerCase() === "paid")
@@ -117,6 +128,7 @@ export function CommissionReportPage() {
     const exportData = filtered.map(c => ({
       "Invoice #": c.invoiceNum,
       "Customer": c.custName,
+      "Sales Person": c.userName,
       "Team": c.team,
       "Sales Amount": c.sales,
       "Commission Rate": c.percentage,
@@ -204,11 +216,37 @@ export function CommissionReportPage() {
               Pay {selectedIds.length} Selected (Rp {calculateSelectedTotal().toLocaleString("id-ID")})
             </button>
           )}
+          {!isUserRole && (
+            <>
+              <select
+                value={teamFilter}
+                onChange={(e) => { setTeamFilter(e.target.value); setUserFilter("all"); }}
+                className="px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-primary transition-all shadow-sm text-slate-600 appearance-none min-w-[120px]"
+              >
+                <option value="all">All Teams</option>
+                <option value="Lelang">Lelang</option>
+                <option value="User">User</option>
+                <option value="Offline">Offline</option>
+              </select>
+              <select
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                className="px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-primary transition-all shadow-sm text-slate-600 appearance-none min-w-[140px]"
+              >
+                <option value="all">All Members</option>
+                {uniqueUsers
+                  .filter(u => teamFilter === "all" || u?.team === teamFilter)
+                  .map(u => (
+                    <option key={u?.userId} value={String(u?.userId)}>{u?.userName}</option>
+                  ))}
+              </select>
+            </>
+          )}
           <input
             type="month"
             value={monthFilter}
             onChange={(e) => setMonthFilter(e.target.value)}
-            className="w-40 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-primary transition-all shadow-sm text-slate-600"
+            className="w-36 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-primary transition-all shadow-sm text-slate-600"
           />
           <button
             onClick={handleExport}
@@ -305,6 +343,7 @@ export function CommissionReportPage() {
                 )}
                 <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Invoice #</th>
                 <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Customer</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Sales Person</th>
                 {!isUserRole && (
                   <th className="px-5 py-3 text-left text-xs font-medium text-slate-500">Team</th>
                 )}
@@ -352,6 +391,9 @@ export function CommissionReportPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       <p className="text-sm text-slate-700">{entry.custName}</p>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm font-semibold text-slate-900">{entry.userName}</p>
                     </td>
                     {!isUserRole && (
                       <td className="px-5 py-3.5">
