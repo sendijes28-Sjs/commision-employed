@@ -25,10 +25,17 @@ export async function up(knex) {
     // Re-create the name index
     await knex.raw(`CREATE INDEX products_name_index ON products (name)`);
   } else {
-    // For PostgreSQL: just add unique constraint
-    await knex.schema.alterTable('products', (table) => {
-      table.unique('sku');
-    });
+    // For PostgreSQL: just add unique constraint if it doesn't exist
+    // Check if constraint exists to avoid failure on retry
+    const hasConstraint = await knex.raw(`
+      SELECT 1 FROM pg_constraint WHERE conname = 'products_sku_unique'
+    `);
+    
+    if (hasConstraint.rowCount === 0) {
+      await knex.schema.alterTable('products', (table) => {
+        table.unique('sku');
+      });
+    }
   }
 }
 
@@ -56,8 +63,15 @@ export async function down(knex) {
     await knex.raw(`CREATE INDEX products_sku_index ON products (sku)`);
     await knex.raw(`CREATE INDEX products_name_index ON products (name)`);
   } else {
-    await knex.schema.alterTable('products', (table) => {
-      table.dropUnique('sku');
-    });
+    // Check if constraint exists before dropping
+    const hasConstraint = await knex.raw(`
+      SELECT 1 FROM pg_constraint WHERE conname = 'products_sku_unique'
+    `);
+    
+    if (hasConstraint.rowCount > 0) {
+      await knex.schema.alterTable('products', (table) => {
+        table.dropUnique('sku');
+      });
+    }
   }
 }
