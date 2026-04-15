@@ -107,7 +107,8 @@ app.use('/api/commissions', commissionRoutes);
 
 // Serve Frontend in Production
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../dist');
+  // __dirname is dist/server/ (from tsc output), so .. gets us to dist/
+  const distPath = path.join(__dirname, '..');
   app.use(express.static(distPath));
   app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
