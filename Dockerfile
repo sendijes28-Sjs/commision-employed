@@ -33,7 +33,7 @@ ENV NODE_ENV=production
 
 # DOCKER-2: Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:4000/api/health || exit 1
+  CMD curl -f http://localhost:${PORT:-4000}/api/health || exit 1
 
 # Startup script to handle migrations and seeding before starting the app
 CMD ["sh", "-c", "npm run db:init && node dist/server/index.js"]
