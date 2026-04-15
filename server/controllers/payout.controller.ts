@@ -54,14 +54,18 @@ export const createPayout = async (req: any, res: Response) => {
 
   try {
     await db.transaction(async (trx) => {
-      const [payoutId] = await trx('payouts').insert({
+      const insertResult = await trx('payouts').insert({
         user_id: userId,
         total_amount: totalAmount,
         payment_date: paymentDate,
         receipt_path: receiptPath,
         notes,
         status: 'Completed'
-      });
+      }).returning('id');
+
+      const payoutId = Array.isArray(insertResult) 
+        ? (typeof insertResult[0] === 'object' ? insertResult[0].id : insertResult[0]) 
+        : insertResult;
 
       for (const invId of parsedInvoiceIds) {
         await trx('payout_items').insert({

@@ -16,12 +16,16 @@ export const importMasterLedger = async (req: any, res: Response) => {
       await trx('master_ledger').del();
 
       for (const record of data) {
-        const [ledgerId] = await trx('master_ledger').insert({
+        const insertResult = await trx('master_ledger').insert({
           invoice_number: record.invoice_number,
           date: record.date,
           customer_name: record.customer_name || '',
           total_amount: record.total_amount || 0
-        });
+        }).returning('id');
+
+        const ledgerId = Array.isArray(insertResult) 
+          ? (typeof insertResult[0] === 'object' ? insertResult[0].id : insertResult[0]) 
+          : insertResult;
 
         if (record.items && Array.isArray(record.items)) {
           for (const item of record.items) {

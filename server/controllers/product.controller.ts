@@ -23,11 +23,15 @@ export const createProduct = async (req: any, res: Response) => {
   if (!name || name.trim() === '') return res.status(400).json({ error: 'Product name is required' });
 
   try {
-    const [id] = await db('products').insert({
+    const insertResult = await db('products').insert({
       sku: sku || null,
       name: name.trim(),
       bottom_price: bottom_price || 0
-    });
+    }).returning('id');
+
+    const id = Array.isArray(insertResult) 
+      ? (typeof insertResult[0] === 'object' ? insertResult[0].id : insertResult[0]) 
+      : insertResult;
 
     await AuditService.log({
       userId: req.user.id,

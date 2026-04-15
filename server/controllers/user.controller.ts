@@ -31,14 +31,18 @@ export const createUser = async (req: any, res: Response) => {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const [id] = await db('users').insert({
+    const insertResult = await db('users').insert({
       name,
       email,
       password: hashedPassword,
       team,
       role: role || 'user',
       status: status || 'Active'
-    });
+    }).returning('id');
+
+    const id = Array.isArray(insertResult) 
+      ? (typeof insertResult[0] === 'object' ? insertResult[0].id : insertResult[0]) 
+      : insertResult;
 
     await AuditService.log({
       userId: req.user.id,

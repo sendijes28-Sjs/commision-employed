@@ -45,14 +45,18 @@ export const createInvoice = async (req: any, res: Response) => {
         }
       }
 
-      const [invoiceId] = await trx('invoices').insert({
+      const insertResult = await trx('invoices').insert({
         invoice_number,
         date,
         customer_name,
         user_id,
         team,
         total_amount
-      });
+      }).returning('id');
+
+      const invoiceId = Array.isArray(insertResult) 
+        ? (typeof insertResult[0] === 'object' ? insertResult[0].id : insertResult[0]) 
+        : insertResult;
 
       for (const item of items) {
         let bottomPrice = 0;
