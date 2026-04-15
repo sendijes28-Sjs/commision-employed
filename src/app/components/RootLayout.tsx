@@ -4,10 +4,12 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "./ui/sonner";
+import { useState } from "react";
 
 export function RootLayout() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   if (loading) {
     return (
@@ -24,9 +26,10 @@ export function RootLayout() {
   return (
     <div className="flex h-screen bg-background text-slate-900 font-sans antialiased overflow-hidden">
       <Toaster />
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar />
+      <Sidebar isMobileOpen={isMobileMenuOpen} onCloseMobile={() => setIsMobileMenuOpen(false)} />
+      
+      <div className="flex flex-1 flex-col overflow-hidden w-full">
+        <TopBar onMenuClick={() => setIsMobileMenuOpen(true)} />
         <main className="flex-1 overflow-y-auto p-4 md:p-5 custom-scrollbar">
           <Outlet />
         </main>

@@ -19,10 +19,11 @@ interface Product {
   id: number;
   sku: string;
   name: string;
+  normal_price: number;
   bottom_price: number;
 }
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 const normalizeString = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function CreateInvoicePage() {
@@ -46,7 +47,7 @@ export function CreateInvoicePage() {
       team: "",
       userId: "",
       customerName: "",
-      items: [{ id: Date.now().toString(), productName: "", quantity: 1, price: 0, bottomPrice: 0 }],
+      items: [{ id: Date.now().toString(), productName: "", quantity: 1, price: 0, normalPrice: 0, bottomPrice: 0 }],
     },
   });
 
@@ -69,28 +70,55 @@ export function CreateInvoicePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [usersRes, productsRes] = await Promise.all([
-          axios.get(`${API_URL}/users`),
-          axios.get(`${API_URL}/products`)
-        ]);
-        setUsers(usersRes.data);
-        setProducts(productsRes.data);
-      } catch (error) { console.error(error); }
+        const promises: any[] = [axios.get(`${API_URL}/products`)];
+        if (isAdmin) {
+          promises.push(axios.get(`${API_URL}/users`));
+        }
+        
+        const results = await Promise.all(promises);
+        setProducts(results[0].data);
+        if (isAdmin && results[1]) {
+          setUsers(results[1].data);
+        } else if (user) {
+          // If not admin (or fetch failed), at least show the current user so their name appears
+          setUsers([{ id: user.id, name: user.name, team: user.team || "" }]);
+        }
+      } catch (error) { toast.error("An error occurred"); }
     };
     fetchData();
-  }, []);
+  }, [isAdmin, user]);
 
+  // Initialize form with current user details once the users list is loaded
   useEffect(() => {
-    if (!isAdmin && user) {
-      setValue("team", user.team || "");
-      setValue("userId", String(user.id || ""));
+    if (user && users.length > 0) {
+      const currentId = watch("userId");
+      const currentTeam = watch("team");
+      
+      // Only set if not already set by the user or by previous logic
+      if (!currentId) {
+        setValue("userId", String(user.id));
+      }
+      if (!currentTeam) {
+        setValue("team", user.team || "");
+      }
     }
-  }, [isAdmin, user, setValue]);
+  }, [user, users, setValue, watch]);
+
+  // Auto-update team when selected user changes (Form Field watch)
+  const watchedUserId = watch("userId");
+  useEffect(() => {
+    if (watchedUserId && users.length > 0) {
+      const foundUser = users.find(u => String(u.id) === String(watchedUserId));
+      if (foundUser && foundUser.team) {
+        setValue("team", foundUser.team);
+      }
+    }
+  }, [watchedUserId, users, setValue]);
 
   // Build a normalized lookup map once from the products array
   const productMap = useMemo(() => {
-    const map = new Map<string, number>();
-    products.forEach(p => map.set(normalizeString(p.name), p.bottom_price));
+    const map = new Map<string, { normal: number, bottom: number }>();
+    products.forEach(p => map.set(normalizeString(p.name), { normal: p.normal_price, bottom: p.bottom_price }));
     return map;
   }, [products]);
 
@@ -99,9 +127,10 @@ export function CreateInvoicePage() {
   const handleProductBlur = useCallback((index: number) => {
     const currentName = watch(`items.${index}.productName`);
     if (!currentName) return;
-    const bottomPrice = productMap.get(normalizeString(currentName));
-    if (bottomPrice !== undefined) {
-      setValue(`items.${index}.bottomPrice`, bottomPrice);
+    const pricing = productMap.get(normalizeString(currentName));
+    if (pricing) {
+      setValue(`items.${index}.normalPrice`, pricing.normal);
+      setValue(`items.${index}.bottomPrice`, pricing.bottom);
     }
   }, [productMap, watch, setValue]);
 
@@ -141,10 +170,11 @@ export function CreateInvoicePage() {
         result.items.forEach((item: any, idx: number) => {
           const vItem = result.verification?.items?.[idx];
           append({ 
-            id: Date.now().toString() + Math.random(), 
+            id: Date.now().toString() + Math.random(),
             productName: item.productName || "", 
             quantity: Number(item.quantity) || 1, 
             price: Math.floor(Number(item.price)) || 0, 
+            normalPrice: vItem?.normalPrice ? Math.floor(Number(vItem.normalPrice)) : 0, 
             bottomPrice: vItem?.bottomPrice ? Math.floor(Number(vItem.bottomPrice)) : 0 
           });
         });
@@ -152,7 +182,7 @@ export function CreateInvoicePage() {
       setVerification(result.verification);
       setUploadSuccess(true);
     } catch (e) {
-      console.error('OCR upload failed:', e);
+      toast.error('OCR upload failed');
       alert('Gagal memproses dokumen. Silakan coba lagi atau input manual.');
     } finally { setIsProcessing(false); }
   };
@@ -171,8 +201,11 @@ export function CreateInvoicePage() {
           productName: item.productName, 
           quantity: item.quantity, 
           price: Math.floor(item.price), 
+          normalPrice: Math.floor(item.normalPrice || 0),
           bottomPrice: Math.floor(item.bottomPrice || 0) 
-        }))
+        })),
+        userId: data.userId,
+        team: data.team
       };
       await axios.post(`${API_URL}/invoices`, payload);
       navigate("/invoices");
@@ -299,7 +332,7 @@ export function CreateInvoicePage() {
                   className={`w-full px-4 py-2.5 ${!isAdmin ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50/50'} border border-slate-100 rounded-lg outline-none focus:border-primary transition-all font-semibold text-[10px] appearance-none`}
                 >
                   <option value="">Select User...</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  {users.map(u => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
                 </select>
               </div>
               <div className="md:col-span-2 space-y-2">
@@ -324,7 +357,7 @@ export function CreateInvoicePage() {
               {!itemsLocked && (
                 <button
                   type="button"
-                  onClick={() => append({ id: Date.now().toString(), productName: "", quantity: 1, price: 0, bottomPrice: 0 })}
+                  onClick={() => append({ id: Date.now().toString(), productName: "", quantity: 1, price: 0, normalPrice: 0, bottomPrice: 0 })}
                   className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all font-semibold uppercase tracking-wide text-[8px] flex items-center gap-2 active:scale-95"
                 >
                   <Plus className="w-3 h-3" /> Add Item
@@ -377,10 +410,44 @@ export function CreateInvoicePage() {
                               readOnly={itemsLocked}
                               className={`w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded font-semibold text-slate-900 outline-none text-[10px] ${itemsLocked ? 'bg-slate-50 cursor-not-allowed' : ''}`}
                             />
-                             {isAdmin && (
+                             {watchedItems[index]?.normalPrice > 0 && (
                                <div className="absolute -bottom-3 left-1 flex items-center gap-1">
                                  <span className="text-[6px] font-bold uppercase tracking-tight text-slate-400">
-                                   Min: {formatRupiah(watchedItems[index]?.bottomPrice || 0)}
+                                   {(() => {
+                                    const normal = watchedItems[index]?.normalPrice || 0;
+                                    const selling = (watchedItems[index] as any)?.price || 0;
+                                    const drop = ((normal - selling) / normal) * 100;
+                                    
+                                    let colorClass = "bg-emerald-500";
+                                    let label = "Safe";
+                                    let textColor = "text-slate-400";
+
+                                    if (drop > 8) { 
+                                      colorClass = "bg-rose-600 animate-pulse"; 
+                                      label = "REJECT"; 
+                                      textColor = "text-rose-600";
+                                    } else if (drop > 5) { 
+                                      colorClass = "bg-rose-500"; 
+                                      label = "Critical"; 
+                                      textColor = "text-rose-500";
+                                    } else if (drop > 2) { 
+                                      colorClass = "bg-amber-500"; 
+                                      label = "Warning"; 
+                                      textColor = "text-amber-500";
+                                    } else if (drop < 0) {
+                                      label = "Promo";
+                                      textColor = "text-emerald-500";
+                                    }
+
+                                    return (
+                                      <>
+                                        <div className={`w-1 h-1 rounded-full ${colorClass}`} />
+                                        <span className={`text-[6px] font-bold uppercase tracking-tight ${textColor}`}>
+                                          {label} ({drop > 0 ? drop.toFixed(1) : 0}%)
+                                        </span>
+                                      </>
+                                    );
+                                  })()}
                                  </span>
                                </div>
                              )}

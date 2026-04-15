@@ -4,14 +4,14 @@ import { ShieldCheck, Mail, Lock, Loader2, TrendingUp, Users, ChevronRight } fro
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  
+
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -45,16 +45,16 @@ export function LoginPage() {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <ShieldCheck className="w-5 h-5 text-white" />
             </div>
-            <span className="text-sm font-semibold tracking-tighter italic">PT. Aneka Delapan Dekorasi</span>
+            <span className="text-sm font-semibold tracking-tighter italic">Glory8 | Home Living</span>
           </div>
 
           <div className="relative z-10 space-y-4">
             <h1 className="text-3xl font-semibold leading-none tracking-tight">
-              Commission <br />
+              Glory8 Commission <br />
               <span className="text-primary italic">System</span>
             </h1>
             <p className="text-xs text-slate-400 font-semibold max-w-[240px] italic">
-              Aplikasi pendukung perhitungan komisi internal PT. Aneka Delapan Dekorasi.
+              Aplikasi pendukung perhitungan komisi internal Glory8.
             </p>
 
             <div className="grid grid-cols-2 gap-3 pt-4">
@@ -89,8 +89,8 @@ export function LoginPage() {
 
           {error && (
             <div className="mb-6 p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 text-[10px] font-semibold italic">
-               <ShieldCheck className="w-3.5 h-3.5" />
-               {error}
+              <ShieldCheck className="w-3.5 h-3.5" />
+              {error}
             </div>
           )}
 
@@ -127,7 +127,7 @@ export function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white transition-all font-medium text-xs"
-                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                  placeholder="Password"
                 />
               </div>
             </div>
@@ -149,18 +149,11 @@ export function LoginPage() {
               </button>
             </div>
           </form>
-
-          <div className="mt-8 text-center">
-            <p className="text-slate-400 text-[10px] font-semibold italic opacity-70">
-              Don't have an account? <br className="lg:hidden" />
-              <a href="#" className="text-slate-900 font-semibold hover:text-primary transition-colors ml-1 uppercase tracking-widest not-italic">Request Access</a>
-            </p>
-          </div>
         </div>
       </div>
-      
+
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 opacity-10 select-none pointer-events-none grayscale">
-        <span className="text-[7px] font-semibold tracking-[0.3em] text-slate-400 italic">INTERNAL MANAGEMENT SYSTEM V2.0.4</span>
+        <span className="text-[7px] font-semibold tracking-[0.3em] text-slate-400 italic">INTERNAL MANAGEMENT SYSTEM V1.0.0</span>
       </div>
     </div>
   );

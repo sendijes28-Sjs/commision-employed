@@ -21,16 +21,6 @@ async function importProducts() {
     console.log(`Found ${lines.length} lines in CSV.`);
 
     let importedCount = 0;
-
-    const insert = db.prepare('INSERT INTO products (sku, name, bottom_price) VALUES (?, ?, ?)');
-
-    const transaction = db.transaction((rows) => {
-        db.prepare('DELETE FROM products').run();
-        for (const row of rows) {
-            insert.run(row.sku, row.name, row.bottom_price);
-        }
-    });
-
     const productsToInsert: any[] = [];
 
     // Skip initial empty rows or generic headers
@@ -69,10 +59,29 @@ async function importProducts() {
         }
     }
 
-    transaction(productsToInsert);
-    console.log(`Successfully imported ${importedCount} products into database.`);
+    try {
+        await db.transaction(async (trx) => {
+            console.log('Cleaning products table...');
+            await trx('products').del();
+            console.log(`Inserting ${productsToInsert.length} products...`);
+            
+            // Batch insert for performance
+            const chunkSize = 100;
+            for (let i = 0; i < productsToInsert.length; i += chunkSize) {
+                const chunk = productsToInsert.slice(i, i + chunkSize);
+                await trx('products').insert(chunk);
+            }
+        });
+        console.log(`Successfully imported ${importedCount} products into database.`);
+    } catch (err) {
+        console.error("Database transaction failed:", err);
+        throw err;
+    }
 }
 
-importProducts().catch(err => {
-    console.error("Import failed:", err);
-});
+importProducts()
+    .then(() => process.exit(0))
+    .catch(err => {
+        console.error("Import failed:", err);
+        process.exit(1);
+    });

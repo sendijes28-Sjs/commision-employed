@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 import { PageHeader } from "../components/PageHeader";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL, UPLOADS_URL } from '@/lib/api';
 
 interface Payout {
   id: number;
@@ -169,7 +169,7 @@ export function PayoutHistoryPage() {
                  <div className="mt-4 pt-4 border-t border-slate-100">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide block mb-3">Electronic Receipt Proof</span>
                     <img 
-                      src={`http://${window.location.hostname}:4000/uploads/${selectedPayout.receipt_path}`} 
+                      src={`${UPLOADS_URL}/${selectedPayout.receipt_path}`} 
                       alt="Receipt" 
                       className="w-full h-48 object-cover rounded-xl border border-slate-200 shadow-sm"
                     />

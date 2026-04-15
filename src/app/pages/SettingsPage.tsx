@@ -6,7 +6,7 @@ import { PageHeader } from "../components/PageHeader";
 import axios from "axios";
 import { toast } from "sonner";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 export function SettingsPage() {
   const { user, logout } = useAuth();
@@ -33,7 +33,7 @@ export function SettingsPage() {
         const res = await axios.get(`${API_URL}/settings`);
         setSettings({ ...settings, ...res.data });
       } catch (error) {
-        console.error("Failed to load settings", error);
+        toast.error("Failed to load settings");
       } finally {
         setIsLoading(false);
       }
@@ -495,11 +495,8 @@ export function SettingsPage() {
                                       return parseFloat(cleaned) || 0;
                                     };
 
-                                    // DEBUG: buka F12 > Console untuk lihat struktur kolom file CSV Anda
-                                     console.log("=== CSV ROWS TOTAL:", rows.length);
-                                     console.log("=== ROW[0]:", rows[0]);
-                                     console.log("=== ROW[1]:", rows[1]);
-                                     console.log("=== ROW[2]:", rows[2]);
+
+
 
                                      const isInvNum = (val: { toString: () => string; }) => {
                                        if (!val) return false;
@@ -516,13 +513,13 @@ export function SettingsPage() {
                                          const cell = r2[ci]?.toString().trim() || "";
                                          if (isInvNum(cell) && !/faktur|invoice|nomor/i.test(cell)) {
                                            invoiceCol = ci;
-                                           console.log("=== AUTO-DETECT: invoice col", ci, "example:", cell);
+
                                            break;
                                          }
                                        }
                                        if (invoiceCol !== 2) break;
                                      }
-                                     console.log("=== Using invoice column:", invoiceCol);
+
 
                                      rows.forEach((row) => {
                                        if (row.length < 5) return;
@@ -551,7 +548,7 @@ export function SettingsPage() {
                                      });
 
                                      const finalData = Object.values(grouped);
-                                     console.log("=== INVOICES PARSED:", finalData.length);
+
                                      if (finalData.length === 0) {
                                        toast.error("Tidak ada data invoice valid. Buka F12 > Console untuk lihat detail kolom CSV Anda.");
                                        return;

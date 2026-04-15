@@ -6,14 +6,16 @@ import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { toast } from "sonner";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 interface InvoiceItem {
   id: string;
   product: string;
   quantity: number;
   price: number;
+  normalPrice: number;
   bottomPrice: number;
+  flagColor: string;
 }
 
 interface InvoiceDetailType {
@@ -42,7 +44,9 @@ export function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<InvoiceDetailType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
   const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
+  const isAdminOrSuper = isAdmin;
   const location = useLocation();
   const backPath = location.state?.from || "/invoices";
 
@@ -51,7 +55,7 @@ export function InvoiceDetailPage() {
     
     const fetchDetail = async () => {
       try {
-        const res = await axios.get(`${API_URL}/invoice-detail?id=${encodeURIComponent(id)}`);
+        const res = await axios.get(`${API_URL}/invoices/detail?id=${encodeURIComponent(id)}`);
         const data = res.data;
         if (data.error) throw new Error(data.error);
 
@@ -68,11 +72,13 @@ export function InvoiceDetailPage() {
             product: it.product_name,
             quantity: it.quantity,
             price: it.price,
-            bottomPrice: it.bottom_price
+            normalPrice: it.normal_price,
+            bottomPrice: it.bottom_price,
+            flagColor: it.flag_color || 'none'
           }))
         });
       } catch (err) {
-        console.error(err);
+        toast.error("An error occurred");
       } finally {
         setIsLoading(false);
       }
@@ -145,8 +151,7 @@ export function InvoiceDetailPage() {
 
   const status = statusConfig[invoice.status] || statusConfig.Pending;
   const totalSales = invoice.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-  const belowBottom = (item: InvoiceItem) => item.bottomPrice > 0 && item.price < item.bottomPrice;
-  const hasWarning = invoice.items.some(belowBottom);
+  const hasWarning = invoice.items.some(item => ['yellow', 'red'].includes(item.flagColor));
 
   return (
     <div className="space-y-8 pb-20 max-w-7xl mx-auto">
@@ -165,7 +170,7 @@ export function InvoiceDetailPage() {
                <Printer className="w-3.5 h-3.5" />
                Print Invoice
             </button>
-            {isAdmin && invoice.status === 'Pending' && (
+            {isSuperAdmin && invoice.status === 'Pending' && (
               <>
                 <button onClick={() => updateStatus('approved')} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all font-semibold uppercase tracking-wide text-[8px] active:scale-95 shadow-md">
                   <Check className="w-3.5 h-3.5" /> Approve
@@ -274,7 +279,7 @@ export function InvoiceDetailPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
                {invoice.items.map((item, idx) => {
-                 const isIssue = belowBottom(item);
+                 const isIssue = ['yellow', 'red'].includes(item.flagColor);
                  return (
                     <tr key={item.id} className={`group ${isIssue ? 'bg-rose-50/10' : 'hover:bg-slate-50/30'} transition-all`}>
                       <td className="px-5 py-3">
@@ -292,11 +297,21 @@ export function InvoiceDetailPage() {
                          <span className="text-[10px] font-semibold text-slate-900">{item.quantity}</span>
                       </td>
                       <td className="px-5 py-3 text-right">
-                         <p className={`text-[10px] font-semibold ${isAdmin && isIssue ? 'text-orange-600' : 'text-slate-900'} tracking-tight`}>{formatRupiah(item.price)}</p>
+                         <div className="flex flex-col items-end">
+                            <p className={`text-[10px] font-semibold ${isIssue ? 'text-orange-600' : 'text-slate-900'} tracking-tight`}>{formatRupiah(item.price)}</p>
+                            {item.flagColor !== 'none' && (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                 <div className={`w-1 h-1 rounded-full ${item.flagColor === 'green' ? 'bg-emerald-500' : item.flagColor === 'yellow' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                                 <span className={`text-[6px] font-bold uppercase ${item.flagColor === 'green' ? 'text-emerald-600' : item.flagColor === 'yellow' ? 'text-amber-600' : 'text-rose-600'}`}>
+                                   {item.flagColor === 'green' ? 'Safe' : item.flagColor === 'yellow' ? 'Warning' : 'Critical'}
+                                 </span>
+                              </div>
+                            )}
+                         </div>
                       </td>
                       {isAdmin && (
                         <td className="px-5 py-3 text-right">
-                           <span className="text-[9px] font-semibold text-slate-400 opacity-70">{formatRupiah(item.bottomPrice)}</span>
+                           <span className="text-[9px] font-semibold text-slate-400 opacity-70">{formatRupiah(item.normalPrice || 0)}</span>
                         </td>
                       )}
                       <td className="px-5 py-3 text-right">

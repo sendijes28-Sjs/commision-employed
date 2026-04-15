@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+ import { useState, useEffect } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Download, Calendar, Users, Clock, DollarSign, FileSpreadsheet, TrendingUp, Search, ArrowUpRight, BarChart3, PieChart, Wallet, CreditCard, ChevronRight, Loader2, CheckCircle2, ShieldCheck, Check, X, Upload } from "lucide-react";
@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 import axios from "axios";
 import { toast } from "sonner";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 interface CommissionEntry {
   id: number;
@@ -44,46 +44,26 @@ export function CommissionReportPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [invRes, settingsRes] = await Promise.all([
-        axios.get(`${API_URL}/invoices?limit=9999`),
-        axios.get(`${API_URL}/settings`)
-      ]);
+      const res = await axios.get(`${API_URL}/commissions`);
+      const { data } = res.data;
 
-      const settings = settingsRes.data || {};
-      const lelangPerc = parseFloat(settings.lelang_commission || "3");
-      const userPerc = parseFloat(settings.user_commission || "3");
-      const offlinePerc = parseFloat(settings.offline_commission || "3");
-      const defaultPerc = parseFloat(settings.default_commission || "3");
-
-      const rawData = invRes.data?.data || invRes.data || [];
-      const formatted: CommissionEntry[] = rawData.map((inv: any) => {
-        let perc = defaultPerc;
-        if (inv.team === "Lelang") perc = lelangPerc;
-        else if (inv.team === "User") perc = userPerc;
-        else if (inv.team === "Offline") perc = offlinePerc;
-
-        const statusRaw = inv.status || "Pending";
-        const salesAmt = Number(inv.total_amount) || 0;
-        const commAmt = statusRaw.toLowerCase() === 'rejected' ? 0 : salesAmt * (perc / 100);
-
-        return {
-          id: inv.id,
-          invoiceNum: inv.invoice_number,
-          custName: inv.customer_name,
-          userName: inv.user_name || "Unknown",
-          team: inv.team,
-          sales: "Rp " + salesAmt.toLocaleString("id-ID"),
-          percentage: perc + "%",
-          amount: "Rp " + Math.floor(commAmt).toLocaleString("id-ID"),
-          status: statusRaw,
-          date: inv.date?.substring(0, 10) || "",
-          userId: inv.user_id,
-        };
-      });
+      const formatted: CommissionEntry[] = data.map((inv: any) => ({
+        id: inv.id,
+        invoiceNum: inv.invoiceNumber,
+        custName: inv.customerName,
+        userName: inv.userName,
+        team: inv.team,
+        sales: "Rp " + (Number(inv.totalAmount) || 0).toLocaleString("id-ID"),
+        percentage: inv.commissionPercentage + "%",
+        amount: "Rp " + Math.floor(inv.commissionAmount).toLocaleString("id-ID"),
+        status: inv.status || 'Pending',
+        date: inv.date?.substring(0, 10) || "",
+        userId: inv.userId,
+      }));
 
       setAllCommissions(formatted);
     } catch (err) {
-      console.error("Failed to fetch commissions", err);
+      toast.error("Failed to fetch commissions");
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +128,8 @@ export function CommissionReportPage() {
   };
 
   const handleSelectAll = () => {
-    const payable = filtered.filter(c => (c.status.toLowerCase() === 'approved' || c.status.toLowerCase() === 'acc' || c.status.toLowerCase() === 'pending'));
+    // BUG-3 FIX: Only select Approved invoices for payout (not Pending)
+    const payable = filtered.filter(c => c.status.toLowerCase() === 'approved');
     if (selectedIds.length === payable.length) {
       setSelectedIds([]);
     } else {
@@ -164,14 +145,20 @@ export function CommissionReportPage() {
 
   const handlePaySubmit = async () => {
     if (selectedIds.length === 0) return;
-    const users = new Set(filtered.filter(c => selectedIds.includes(c.id)).map(c => c.userId));
-    if (users.size > 1) {
-      if (!confirm("Multiple users selected. Are you sure you want to process this as one payout?")) return;
+
+    // BUG-4 FIX: Validate all selected invoices belong to same user
+    const selectedEntries = filtered.filter(c => selectedIds.includes(c.id));
+    const uniqueUserIds = [...new Set(selectedEntries.map(c => c.userId))];
+    if (uniqueUserIds.length > 1) {
+      toast.error("Cannot process payout for multiple users at once. Please select invoices from a single user.");
+      return;
     }
+
+    const targetUserId = uniqueUserIds[0];
 
     setIsSubmittingPayout(true);
     const formData = new FormData();
-    formData.append("userId", String(filtered.find(c => selectedIds.includes(c.id))?.userId));
+    formData.append("userId", String(targetUserId));
     formData.append("invoiceIds", JSON.stringify(selectedIds));
     formData.append("totalAmount", String(calculateSelectedTotal()));
     formData.append("notes", paymentNotes);
@@ -187,7 +174,7 @@ export function CommissionReportPage() {
       setReceiptFile(null);
       fetchData();
     } catch (err: any) {
-      console.error(err);
+      toast.error("Failed to format payout");
       const detail = err.response?.data?.detail || "";
       toast.error(`Failed to process payment. ${detail}`);
     } finally {
@@ -336,7 +323,7 @@ export function CommissionReportPage() {
                     <input
                       type="checkbox"
                       onChange={handleSelectAll}
-                      checked={selectedIds.length > 0 && selectedIds.length === filtered.filter(c => c.status === 'Approved').length}
+                      checked={selectedIds.length > 0 && selectedIds.length === filtered.filter(c => c.status.toLowerCase() === 'approved').length}
                       className="w-4 h-4 rounded cursor-pointer accent-primary"
                     />
                   </th>
@@ -374,7 +361,8 @@ export function CommissionReportPage() {
                   <tr key={idx} className={`group hover:bg-slate-50/50 transition-colors ${selectedIds.includes(entry.id) ? 'bg-primary/[0.03]' : ''}`}>
                     {!isUserRole && (
                       <td className="px-5 py-3.5 text-center">
-                        {(entry.status.toLowerCase() === 'approved' || entry.status.toLowerCase() === 'acc' || entry.status.toLowerCase() === 'pending') ? (
+                      {/* BUG-3 FIX: Only Approved invoices are selectable for payout */}
+                      {(entry.status.toLowerCase() === 'approved') ? (
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(entry.id)}

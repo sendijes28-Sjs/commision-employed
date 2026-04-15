@@ -6,7 +6,7 @@ import { Check, X, Eye, AlertTriangle, CheckCircle2, Clock, ShieldCheck, Trendin
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 interface ValidationInvoice {
   number: string;
@@ -48,7 +48,7 @@ export function InvoiceValidationPage() {
 
       setInvoices(formatted);
     } catch (err) {
-      console.error("Failed to fetch invoices", err);
+      toast.error("Failed to fetch invoices");
     } finally {
       setIsLoading(false);
     }
@@ -63,10 +63,12 @@ export function InvoiceValidationPage() {
       await axios.put(`${API_URL}/invoices/status?number=${encodeURIComponent(number)}`, { status: newStatus });
       setInvoices((prev) => prev.map((inv) => inv.number === number ? { ...inv, status: newStatus as any } : inv));
     } catch (error) {
-      console.error("Failed to update status", error);
+      toast.error("Failed to update status");
     }
   };
 
+  const isSuperAdmin = user?.role === 'super_admin';
+  const isAdminAtLeast = user?.role === "admin" || user?.role === "super_admin";
   const isUserRole = user?.role === "user";
   const pendingCount = invoices.filter((i) => i.status === "pending").length;
   const warningCount = invoices.filter((i) => i.hasWarning && i.status === "pending").length;
@@ -201,7 +203,7 @@ export function InvoiceValidationPage() {
                       <td className="px-5 py-3.5 text-xs text-slate-400">{inv.date}</td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-center gap-1.5">
-                          {inv.status === 'pending' && !isUserRole ? (
+                          {inv.status === 'pending' && isSuperAdmin ? (
                             <>
                               <button
                                 onClick={() => updateStatus(inv.number, 'approved')}
@@ -281,7 +283,7 @@ export function InvoiceValidationPage() {
                 </div>
 
                 <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
-                  {inv.status === 'pending' && !isUserRole && (
+                  {inv.status === 'pending' && isSuperAdmin && (
                     <div className="flex gap-2 flex-1">
                       <button
                         onClick={() => updateStatus(inv.number, 'approved')}

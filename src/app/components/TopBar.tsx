@@ -1,5 +1,5 @@
 import { useLocation, Link } from "react-router";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Menu } from "lucide-react";
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -11,6 +11,7 @@ const pageTitles: Record<string, string> = {
   "/price-list": "Product Prices",
   "/users": "User Management",
   "/settings": "Settings",
+  "/audit-logs": "Audit Logs",
 };
 
 function buildBreadcrumbs(pathname: string) {
@@ -37,13 +38,21 @@ function buildBreadcrumbs(pathname: string) {
   return [];
 }
 
-export function TopBar() {
+export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const location = useLocation();
   const breadcrumbs = buildBreadcrumbs(location.pathname);
   const isHome = location.pathname === "/";
 
   return (
-    <header className="h-14 bg-white/90 backdrop-blur-xl border-b border-slate-100 flex items-center px-5 z-40 sticky top-0">
+    <header className="h-14 bg-white/90 backdrop-blur-xl border-b border-slate-100 flex items-center px-5 z-40 sticky top-0 gap-3">
+      {/* Mobile menu button */}
+      <button 
+        onClick={onMenuClick}
+        className="md:hidden p-1.5 -ml-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
       {/* Breadcrumb Navigation */}
       <nav className="flex items-center gap-1.5 min-w-0">
         <Link

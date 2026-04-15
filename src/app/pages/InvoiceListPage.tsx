@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Link } from "react-router";
-import { Plus, Search, Eye, FileText, ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { Plus, Search, Eye, FileText, ChevronRight, Loader2, Trash2, AlertTriangle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import { toast } from "sonner";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 interface Invoice {
   id: number;
@@ -20,6 +20,7 @@ interface Invoice {
   status: string;
   date: string;
   userId: number;
+  hasWarning: boolean;
 }
 
 export function InvoiceListPage() {
@@ -55,10 +56,11 @@ export function InvoiceListPage() {
           status: inv.status || "Pending",
           date: inv.date?.substring(0, 10) || "",
           userId: inv.user_id,
+          hasWarning: !!inv.has_warning,
         }));
         setInvoices(formatted);
       } catch (err) {
-        console.error("Failed to fetch invoices", err);
+        toast.error("Failed to fetch invoices");
       } finally {
         setIsLoading(false);
       }
@@ -196,7 +198,12 @@ export function InvoiceListPage() {
                 paginatedInvoices.map((invoice) => (
                   <tr key={invoice.id} className="group hover:bg-slate-50/50 transition-colors">
                     <td className="px-5 py-3.5">
-                      <span className="text-sm font-semibold text-slate-900">#{invoice.number}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-900">#{invoice.number}</span>
+                        {invoice.hasWarning && (
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" title="Low margin items detected" />
+                        )}
+                      </div>
                     </td>
                     {!isUserRole && (
                       <td className="px-5 py-3.5">

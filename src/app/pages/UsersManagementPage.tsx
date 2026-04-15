@@ -28,7 +28,7 @@ interface User {
   status: string;
 }
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 export function UsersManagementPage() {
   const { user: currentUser } = useAuth();
@@ -51,7 +51,7 @@ export function UsersManagementPage() {
       setIsLoading(true);
       const res = await axios.get(`${API_URL}/users`);
       setUsers(res.data);
-    } catch (error) { console.error(error); }
+    } catch (error) { toast.error("An error occurred"); }
     finally { setIsLoading(false); }
   };
 

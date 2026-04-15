@@ -29,7 +29,7 @@ interface MappingFields {
   qtyCol?: number;
 }
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 function parsePrice(raw: string): number {
   if (!raw || typeof raw !== "string") return 0;
@@ -132,7 +132,7 @@ export function ProductPriceListPage() {
         lastUpdated: new Date().toISOString().split("T")[0],
       }));
       setProducts(formatted);
-    } catch (err) { console.error("Failed to fetch products", err); }
+    } catch (err) { toast.error("Failed to fetch products"); }
   };
 
   useEffect(() => { fetchProducts(); }, []);
@@ -167,7 +167,7 @@ export function ProductPriceListPage() {
       setHeaderIndex(foundHeaderIx);
       setMapping({ nameCol: nameC, priceCol: priceC, skuCol: skuC, qtyCol: qtyC });
       setShowMapping(true);
-    } catch (err) { console.error(err); }
+    } catch (err) { toast.error("An error occurred"); }
     finally { if (fileInputRef.current) fileInputRef.current.value = ""; }
   };
 

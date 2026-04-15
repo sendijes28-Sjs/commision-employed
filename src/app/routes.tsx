@@ -11,6 +11,7 @@ import { ProductPriceListPage } from "./pages/ProductPriceListPage";
 import { UsersManagementPage } from "./pages/UsersManagementPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PayoutHistoryPage } from "./pages/PayoutHistoryPage";
+import { AuditLogsPage } from "./pages/AuditLogsPage";
 
 export const router = createBrowserRouter([
   {
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: "price-list", Component: ProductPriceListPage },
       { path: "users", Component: UsersManagementPage },
       { path: "settings", Component: SettingsPage },
+      { path: "audit-logs", Component: AuditLogsPage },
     ],
   },
 ]);

@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, FileText, AlertCircle, TrendingUp, ShieldCheck, Clock, Users, AlertTriangle, ArrowUpRight, LayoutGrid, Activity, Sparkles, Wallet, PieChart, BarChart3, ChevronRight, Globe, Fingerprint, BadgeCheck, XCircle, Search, ChevronDown, Calendar, Filter } from "lucide-react";
+import { FileText, TrendingUp, Users, AlertTriangle, ArrowUpRight, Activity, Wallet, ChevronRight, BadgeCheck, XCircle, Search, ChevronDown, Calendar } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { Link } from "react-router";
 import { StatusBadge } from "../components/StatusBadge";
 
-const API_URL = `http://${window.location.hostname}:4000/api`;
+import { API_URL } from '@/lib/api';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -40,15 +40,13 @@ export function DashboardPage() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [statsRes, invRes, settingsRes] = await Promise.all([
+        const [statsRes, commRes, invRes] = await Promise.all([
           axios.get(`${API_URL}/stats?startDate=${startDate}&endDate=${endDate}`),
-          axios.get(`${API_URL}/invoices?limit=10&startDate=${startDate}&endDate=${endDate}`),
-          axios.get(`${API_URL}/settings`)
+          axios.get(`${API_URL}/commissions?startDate=${startDate}&endDate=${endDate}`),
+          axios.get(`${API_URL}/invoices?limit=10&startDate=${startDate}&endDate=${endDate}`)
         ]);
 
         const statsData = statsRes.data;
-        const summary = statsData.summary || [];
-        const settings = settingsRes.data || {};
 
         setTargetLelang(statsData.targetLelang || 0);
         setTargetUser(statsData.targetUser || 0);
@@ -58,63 +56,52 @@ export function DashboardPage() {
           setUserBreakdown(statsData.userBreakdown || []);
           setUserTimeSeries(statsData.userTimeSeries || []);
         }
+        const commSummary = commRes.data?.summary || {};
 
-        const lelangPerc = parseFloat(settings.lelang_commission || "5.0");
-        const userPerc = parseFloat(settings.user_commission || "4.5");
-        const defaultPerc = parseFloat(settings.default_commission || "3.0");
-
-        let curTotalSales = 0;
-        let curUnpaidComm = 0;
-        let curPaidComm = 0;
-        let curPending = 0;
-        let curRejected = 0;
-
-        summary.forEach((s: any) => {
-          const status = (s.status || "Pending").toLowerCase();
-          const amt = Number(s.total_sales) || 0;
-          curTotalSales += amt;
-
-          if (status === "pending") curPending += s.total_invoices;
-          if (status === "rejected") curRejected += s.total_invoices;
-
-          const getPerc = () => {
-            if (user?.team === "Lelang") return lelangPerc;
-            if (user?.team === "User") return userPerc;
-            return defaultPerc;
-          };
-          const perc = isAdmin ? defaultPerc : getPerc();
-          const comm = amt * (perc / 100);
-
-          if (status === "approved" || status === "pending") curUnpaidComm += comm;
-          if (status === "paid") curPaidComm += comm;
-        });
-
-        setAllTimeSales(curTotalSales);
-        setUnpaidCommission(Math.floor(curUnpaidComm));
-        setPaidCommission(Math.floor(curPaidComm));
-        setPendingCount(curPending);
-        setRejectedCount(curRejected);
+        setAllTimeSales(commSummary.totalSales || 0);
+        setUnpaidCommission(Math.floor(commSummary.unpaidCommission || 0));
+        setPaidCommission(Math.floor(commSummary.paidCommission || 0));
+        
+        // Count statuses from full commission data instead of paginated invoices
+        const allCommissions = commRes.data?.data || [];
+        setPendingCount(allCommissions.filter((c: any) => c.status.toLowerCase() === 'pending').length);
+        setRejectedCount(allCommissions.filter((c: any) => c.status.toLowerCase() === 'rejected').length);
 
         if (isAdmin && statsData.teamBreakdown) {
           setTeamStats(statsData.teamBreakdown);
         }
 
+        // Recent invoices for sidebar activity
         const recentInvoices = invRes.data?.data || [];
         setLatestInvoices(recentInvoices.slice(0, 6));
 
-        const salesByDate: Record<string, number> = {};
-        recentInvoices.forEach((inv: any) => {
-          const d = inv.date?.substring(0, 10);
-          if (d) salesByDate[d] = (salesByDate[d] || 0) + Number(inv.total_amount);
-        });
-        const formattedChart = Object.keys(salesByDate).sort().map(d => ({
-          date: new Date(d).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }),
-          sales: salesByDate[d]
-        }));
-        setChartData(formattedChart);
+        // Chart data: use userTimeSeries from stats when available (admin),
+        // otherwise aggregate from all invoices in date range
+        if (isAdmin && statsData.userTimeSeries?.length > 0) {
+          const salesByDate: Record<string, number> = {};
+          statsData.userTimeSeries.forEach((pts: any) => {
+            const d = pts.date?.substring(0, 10);
+            if (d) salesByDate[d] = (salesByDate[d] || 0) + Number(pts.daily_sales);
+          });
+          setChartData(Object.keys(salesByDate).sort().map(d => ({
+            date: new Date(d).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }),
+            sales: salesByDate[d]
+          })));
+        } else {
+          // For regular users, build chart from their invoices
+          const salesByDate: Record<string, number> = {};
+          recentInvoices.forEach((inv: any) => {
+            const d = inv.date?.substring(0, 10);
+            if (d) salesByDate[d] = (salesByDate[d] || 0) + Number(inv.total_amount);
+          });
+          setChartData(Object.keys(salesByDate).sort().map(d => ({
+            date: new Date(d).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }),
+            sales: salesByDate[d]
+          })));
+        }
 
       } catch (error) {
-        console.error("Dashboard Load Error:", error);
+        // Error handled silently on dashboard
       } finally {
         setIsLoading(false);
       }
