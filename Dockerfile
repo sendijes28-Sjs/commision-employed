@@ -35,5 +35,5 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:4000/api/health || exit 1
 
-# Startup script to handle migrations before starting the app
-CMD ["sh", "-c", "npm run migrate:prod && node dist/server/index.js"]
+# Startup script to handle migrations and seeding before starting the app
+CMD ["sh", "-c", "npm run db:init && node dist/server/index.js"]

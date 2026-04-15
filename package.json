@@ -11,6 +11,8 @@
     "test": "vitest run",
     "start:prod": "node dist/server/index.js",
     "migrate:prod": "knex migrate:latest --env production",
+    "seed:prod": "knex seed:run --env production",
+    "db:init": "npm run migrate:prod && npm run seed:prod",
     "seed:products": "tsx server/import_products.ts",
     "export:data": "tsx scripts/export-data.ts",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\""
