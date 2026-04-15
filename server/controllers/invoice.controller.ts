@@ -258,3 +258,28 @@ export const deleteInvoice = async (req: any, res: Response) => {
     res.status(500).json({ error: 'Failed to delete invoice: ' + error.message });
   }
 };
+export const getInvoiceByNumber = async (req: any, res: Response) => {
+  try {
+    const invoiceNumber = req.params.invoice_number;
+    if (!invoiceNumber) return res.status(400).json({ error: 'Missing invoice number' });
+
+    const invoice = await db('invoices as i')
+      .leftJoin('users as u', 'i.user_id', 'u.id')
+      .select('i.*', 'u.name as user_name')
+      .where('i.invoice_number', invoiceNumber)
+      .first();
+
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+    if (!isAdmin && invoice.user_id !== req.user.id) {
+       return res.status(403).json({ error: 'Unauthorized to view this invoice.' });
+    }
+
+    const items = await db('invoice_items').where({ invoice_id: invoice.id });
+
+    res.json({ ...invoice, items });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch invoice details' });
+  }
+};

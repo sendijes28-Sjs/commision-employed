@@ -146,3 +146,28 @@ export const updateUserStatus = async (req: any, res: Response) => {
     res.status(500).json({ error: 'Failed to update status: ' + error.message });
   }
 };
+export const resetPassword = async (req: any, res: Response) => {
+  const userId = req.params.id;
+  try {
+    const targetUser = await db('users').where({ id: userId }).first();
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+
+    const defaultPassword = await bcrypt.hash('123456', 10);
+    await db('users').where({ id: userId }).update({ 
+      password: defaultPassword,
+      must_change_password: true 
+    });
+
+    await AuditService.log({
+      userId: req.user.id,
+      action: 'RESET_PASSWORD',
+      entityType: 'user',
+      entityId: userId,
+      description: `Reset password user ${targetUser.name} ke default (123456)`
+    });
+
+    res.json({ success: true, message: 'Password reset to default (123456)' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to reset password: ' + error.message });
+  }
+};

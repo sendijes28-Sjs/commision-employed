@@ -66,3 +66,15 @@ export const changePassword = async (req: any, res: Response) => {
     res.status(500).json({ error: 'Failed to change password: ' + error.message });
   }
 };
+export const getMe = async (req: any, res: Response) => {
+  try {
+    const user = await db('users').where({ id: req.user.id }).first();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const { password: _, ...userData } = user;
+    res.json(userData);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+};
