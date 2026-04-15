@@ -18,9 +18,10 @@ export async function seed(knex) {
     ]);
   }
 
-  // 2. Seed Initial Super Admin (if no users exist)
-  const userCount = await knex('users').count('id as count').first();
-  if (parseInt(userCount.count) === 0) {
+  // 2. Seed Initial Super Admin (idempotent: check if this specific email exists)
+  const adminExists = await knex('users').where({ email: 'superadmin@glory.com' }).first();
+  
+  if (!adminExists) {
     const adminHash = await bcrypt.hash('adminglory123', 10);
     await knex('users').insert({
       name: 'Super Admin',
@@ -31,6 +32,5 @@ export async function seed(knex) {
       status: 'Active',
       must_change_password: true,
     });
-    // SEC-2: Do NOT log credentials to console
   }
 }
