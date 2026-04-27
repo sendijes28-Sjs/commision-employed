@@ -195,7 +195,7 @@ export function DashboardPage() {
   }
 
   // Build stat cards
-  const statCards[] = [];
+  const statCards = [];
   
   if (isAdmin) {
     let salesAmt = 0;

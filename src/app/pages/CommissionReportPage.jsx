@@ -34,7 +34,7 @@ export function CommissionReportPage() {
       const res = await axios.get(`${API_URL}/commissions`);
       const { data } = res.data;
 
-      const formatted: CommissionEntry[] = data.map((inv) => ({
+      const formatted = data.map((inv) => ({
         id: inv.id,
         invoiceNum: inv.invoiceNumber,
         custName: inv.customerName,

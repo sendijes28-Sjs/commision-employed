@@ -42,17 +42,17 @@ function formatPrice(num) {
   return "Rp " + num.toLocaleString("id-ID");
 }
 
-function parseCSV(text)[][] {
+function parseCSV(text) {
   // Auto-detect delimiter: comma or semicolon
   const firstLine = text.split('\n')[0] || '';
   const commaCount = (firstLine.match(/,/g) || []).length;
   const semiCount = (firstLine.match(/;/g) || []).length;
   const delimiter = semiCount > commaCount ? ';' : ',';
 
-  const rows[][] = [];
+  const rows = [];
   let current = "";
   let inQuotes = false;
-  let row[] = [];
+  let row = [];
   
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
@@ -206,8 +206,8 @@ export function ProductPriceListPage() {
 
   const processImport = async () => {
     setShowMapping(false);
-    const newItems[] = [];
-    const changedItems[] = [];
+    const newItems = [];
+    const changedItems = [];
 
     const dataRows = csvRows.slice(headerIndex + 1);
     for (const row of dataRows) {
@@ -248,7 +248,7 @@ export function ProductPriceListPage() {
     }
   };
 
-  const executeFinalImport = async (importData[]) => {
+  const executeFinalImport = async (importData) => {
     if (importData.length === 0) {
       toast.info("Tidak ada pembaruan produk yang dilakukan.");
       return;

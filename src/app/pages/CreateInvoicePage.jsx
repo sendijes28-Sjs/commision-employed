@@ -58,7 +58,7 @@ export function CreateInvoicePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const promises[] = [axios.get(`${API_URL}/products`)];
+        const promises = [axios.get(`${API_URL}/products`)];
         if (isAdmin) {
           promises.push(axios.get(`${API_URL}/users`));
         }
@@ -132,7 +132,7 @@ export function CreateInvoicePage() {
     multiple: true
   });
 
-  const handleFileUpload = async (files[]) => {
+  const handleFileUpload = async (files) => {
     setIsProcessing(true);
     setUploadSuccess(false);
     const formData = new FormData();

@@ -32,7 +32,7 @@ export function InvoiceListPage() {
       try {
         const res = await axios.get(`${API_URL}/invoices?limit=9999`);
         const rawInvoices = res.data?.data || res.data || [];
-        const formatted: Invoice[] = rawInvoices.map((inv) => ({
+        const formatted = rawInvoices.map((inv) => ({
           id: inv.id,
           number: inv.invoice_number,
           userName: inv.user_name || "Unknown User",

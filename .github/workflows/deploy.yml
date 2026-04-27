@@ -1,0 +1,63 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main        # trigger saat push ke branch main
+      - master      # atau branch master
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout kode terbaru
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Build project (frontend + server)
+      - name: Build project
+        run: npm run build
+
+      # 5. Deploy ke VPS via SSH
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+
+            echo "==> Pulling latest code..."
+            cd /var/www/commision-employed
+            git pull origin ${{ github.ref_name }}
+
+            echo "==> Installing dependencies..."
+            npm ci --omit=dev
+
+            echo "==> Building project..."
+            npm run build
+
+            echo "==> Running database migrations..."
+            npm run migrate 2>/dev/null || echo "No migrate script, skipping."
+
+            echo "==> Restarting application..."
+            pm2 restart commision-api --update-env
+            pm2 save
+
+            echo "==> Deploy completed successfully!"
+            pm2 status

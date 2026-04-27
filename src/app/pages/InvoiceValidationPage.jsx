@@ -19,7 +19,7 @@ export function InvoiceValidationPage() {
     try {
       const res = await axios.get(`${API_URL}/invoices?limit=9999`);
       const rawData = res.data?.data || res.data || [];
-      let formatted: ValidationInvoice[] = rawData.map((inv) => ({
+      let formatted = rawData.map((inv) => ({
         number: inv.invoice_number,
         userName: inv.user_name || "Unknown User",
         team: inv.team,
