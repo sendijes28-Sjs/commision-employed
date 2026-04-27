@@ -220,10 +220,8 @@ export function ProductPriceListPage() {
       const sku = mapping.skuCol !== -1 ? row[mapping.skuCol]?.trim() || null;
       const itemName = name.trim();
 
-      // Priority 1: Match by SKU
       let existingMatch = null;
       if (sku) existingMatch = products.find(p => p.sku === sku);
-      // Priority 2: Match by exact name if no SKU provided or match fails (match string exactly in DB)
       if (!existingMatch && !sku) existingMatch = products.find(p => p.name === itemName && (!p.sku || p.sku.trim() === ""));
 
       if (existingMatch) {

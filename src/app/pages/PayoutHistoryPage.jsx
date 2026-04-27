@@ -8,9 +8,6 @@ import { PageHeader } from "../components/PageHeader.jsx";
 import { API_URL, UPLOADS_URL } from '@/lib/api.js';
 
 
-[];
-}
-
 export function PayoutHistoryPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';

@@ -7,11 +7,9 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Waktu maksimal user dibiarkan AFK / Diam (Saat ini 1 Jam)
   const IDLE_TIMEOUT = 60 * 60 * 1000;
 
   useEffect(() => {
-    // Migration: Hapus sisa localStorage yang lama secara paksa
     if (localStorage.getItem('user')) {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
