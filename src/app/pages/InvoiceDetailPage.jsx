@@ -36,8 +36,8 @@ export function InvoiceDetailPage() {
     
     const fetchDetail = async () => {
       try {
-        const res = await axios.get(`${API_URL}/invoices/detail?id=${encodeURIComponent(id)}`);
-        const data = res.data;
+         const res = await axios.get(`${API_URL}/invoices/${encodeURIComponent(id)}`);
+         const data = res.data;
         if (data.error) throw new Error(data.error);
 
         setInvoice({
