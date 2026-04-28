@@ -12,10 +12,19 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['lucide-react', 'recharts'],
-          'vendor-form': ['react-hook-form', 'axios'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react-router')) {
+              return 'vendor-react'
+            }
+            if (id.includes('recharts') || id.includes('lucide-react')) {
+              return 'vendor-ui'
+            }
+            if (id.includes('axios') || id.includes('react-hook-form')) {
+              return 'vendor-form'
+            }
+            return 'vendor'
+          }
         }
       }
     },
