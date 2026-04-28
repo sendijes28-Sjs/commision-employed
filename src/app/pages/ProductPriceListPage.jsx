@@ -3,22 +3,12 @@ import { Plus, Upload, Edit, Trash2, Search, FileText, CheckCircle2, AlertTriang
 import axios from "axios";
 import { toast } from "sonner";
 import { PageHeader } from "../components/PageHeader.jsx";
-
-
-
-
 import { API_URL } from '@/lib/api.js';
 
 function parsePrice(raw) {
   if (!raw || typeof raw !== "string") return 0;
-  // Clean all characters except numbers, comma, and dot
   let cleaned = raw.replace(/[^0-9.,]/g, "");
   if (!cleaned) return 0;
-
-  // In IDR, decimal separators are rare and usually just clutter
-  // If we have "1.500,00", we want "1500"
-  // If we have "1.500", we want "1500"
-  // If we have "1,500,000", we want "1500000"
   
   const segments = cleaned.split(/[.,]/);
   
@@ -28,13 +18,10 @@ function parsePrice(raw) {
 
   const lastSegment = segments[segments.length - 1];
   
-  // If last segment is exactly 2 digits, it's highly likely a decimal (cents/perak)
-  // in which case we ignore it for IDR pricing.
   if (lastSegment.length <= 2 && segments.length > 1) {
     return parseInt(segments.slice(0, -1).join(""), 10) || 0;
   }
 
-  // Otherwise, treat all segments of the whole number (thousands)
   return parseInt(segments.join(""), 10) || 0;
 }
 
@@ -43,7 +30,6 @@ function formatPrice(num) {
 }
 
 function parseCSV(text) {
-  // Auto-detect delimiter: comma or semicolon
   const firstLine = text.split('\n')[0] || '';
   const commaCount = (firstLine.match(/,/g) || []).length;
   const semiCount = (firstLine.match(/;/g) || []).length;
@@ -328,7 +314,6 @@ export function ProductPriceListPage() {
               </div>
            </div>
 
-           {/* Missing Price Warning */}
            {importResult.success && importResult.missingPrice.length > 0 && (
              <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-start gap-3">
                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">

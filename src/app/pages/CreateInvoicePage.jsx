@@ -49,9 +49,7 @@ export function CreateInvoicePage() {
   const findProductMatch = (inputName, productList) => {
     if (!inputName) return null;
     const normInput = normalizeString(inputName);
-    
-    // Strict match only: Only auto-fill if the user types or selects the EXACT product name.
-    // We leave the "guessing" to the backend OCR validation.
+  
     return productList.find(p => normalizeString(p.name) === normInput) || null;
   };
 
@@ -68,7 +66,6 @@ export function CreateInvoicePage() {
         if (isAdmin && results[1]) {
           setUsers(results[1].data);
         } else if (user) {
-          // If not admin (or fetch failed), at least show the current user so their name appears
           setUsers([{ id: user.id, name: user.name, team: user.team || "" }]);
         }
       } catch (error) { toast.error("An error occurred"); }
@@ -76,13 +73,11 @@ export function CreateInvoicePage() {
     fetchData();
   }, [isAdmin, user]);
 
-  // Initialize form with current user details once the users list is loaded
   useEffect(() => {
     if (user && users.length > 0) {
       const currentId = watch("userId");
       const currentTeam = watch("team");
       
-      // Only set if not already set by the user or by previous logic
       if (!currentId) {
         setValue("userId", String(user.id));
       }
@@ -92,7 +87,6 @@ export function CreateInvoicePage() {
     }
   }, [user, users, setValue, watch]);
 
-  // Auto-update team when selected user changes (Form Field watch)
   const watchedUserId = watch("userId");
   useEffect(() => {
     if (watchedUserId && users.length > 0) {
@@ -103,15 +97,12 @@ export function CreateInvoicePage() {
     }
   }, [watchedUserId, users, setValue]);
 
-  // Build a normalized lookup map once from the products array
   const productMap = useMemo(() => {
     const map = new Map();
     products.forEach(p => map.set(normalizeString(p.name), { normal: p.normal_price, bottom: p.bottom_price }));
     return map;
   }, [products]);
 
-  // Use onBlur handler instead of useEffect to update bottomPrice
-  // This fires ONLY when user leaves the input â€” not on every keystroke
   const handleProductBlur = useCallback((index) => {
     const currentName = watch(`items.${index}.productName`);
     if (!currentName) return;
@@ -141,7 +132,7 @@ export function CreateInvoicePage() {
     });
 
     try {
-      const resp = await axios.post(`${API_URL}/ocr/scan`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const resp = await axios.post(`${API_URL}/ocr/scan`, formData);
       const result = resp.data;
 
       if (result.error) {
@@ -152,7 +143,6 @@ export function CreateInvoicePage() {
       setValue("invoiceNumber", result.invoiceNumber || "");
       setValue("date", result.date || new Date().toISOString().split("T")[0]);
       setValue("customerName", result.customerName || "");
-      // Removed generic 'Lelang' assignment here since it should either be auto-filled from the user (non-admin) or manually selected (admin)
       if (result.items && result.items.length > 0) {
         remove();
         result.items.forEach((item, idx) => {
@@ -204,7 +194,6 @@ export function CreateInvoicePage() {
 
   return (
     <div className="space-y-6 pb-20 max-w-7xl mx-auto">
-      {/* Premium Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link to="/invoices" className="w-9 h-9 bg-slate-50 text-slate-400 rounded-lg flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all border border-slate-100">
@@ -255,7 +244,6 @@ export function CreateInvoicePage() {
           </>
         )}
       </div>
-
 
       <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 space-y-8">
@@ -335,7 +323,6 @@ export function CreateInvoicePage() {
             </div>
           </div>
 
-          {/* Line Items - Premium Smart Ledger */}
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -509,7 +496,6 @@ export function CreateInvoicePage() {
         </div>
       </form>
 
-      {/* Single shared datalist for all product inputs â€” ~1199 nodes instead of NÃ—1199 */}
       <datalist id="products-list">
         {products.map(p => <option key={p.id} value={p.name}>{p.sku}</option>)}
       </datalist>

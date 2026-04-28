@@ -114,7 +114,6 @@ export function UsersManagementPage() {
     const matchRole = roleFilter === "All Roles" || u.role.toLowerCase() === roleFilter.toLowerCase();
     const matchTeam = teamFilter === "All Teams" || u.team.toLowerCase() === teamFilter.toLowerCase();
     
-    // Safety check: Regular admin can never see super admin
     if (currentUser?.role === 'admin' && (u.role === 'super_admin' || u.role === 'Super Admin')) {
       return false;
     }
@@ -176,7 +175,6 @@ export function UsersManagementPage() {
         </div>
       </div>
 
-      {/* Profile Card Matrix */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
           <div className="col-span-full py-16 text-center">
@@ -346,7 +344,6 @@ export function UsersManagementPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {userToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-md">
            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 overflow-hidden animate-in zoom-in-95 duration-300">

@@ -23,7 +23,6 @@ export function SettingsPage() {
     target_user: "0"
   });
 
-  // Change password state
   const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [pwSaving, setPwSaving] = useState(false);
 
@@ -86,8 +85,6 @@ export function SettingsPage() {
         subtitle="Manage system configurations and ledger synchronization"
       />
 
-      
-
       <div className="flex flex-col lg:flex-row gap-8">
         <div className="lg:w-56 space-y-1">
            {[
@@ -125,7 +122,6 @@ export function SettingsPage() {
            </div>
         </div>
 
-        {/* Dynamic Content Area */}
         <div className="flex-1 space-y-6">
            {activeTab === 'profile' && (
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -432,7 +428,6 @@ export function SettingsPage() {
                        </div>
 
                         <div className="grid grid-cols-1 gap-6">
-                          {/* --- LAPORAN PENJUALAN --- */}
                           <div className="bg-slate-50/50 border-2 border-dashed border-slate-200 rounded-xl p-8 hover:border-primary/50 transition-all flex flex-col gap-5">
                             <div className="flex items-center gap-3">
                                <div className="w-10 h-10 bg-primary/10 text-primary rounded-lg flex items-center justify-center">
@@ -465,7 +460,6 @@ export function SettingsPage() {
                                     const parseIDDate = (dateVal) => {
                                       if (!dateVal) return "";
                                       
-                                      // Handle Excel serial date (number)
                                       if (typeof dateVal === 'number') {
                                         const jsDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
                                         return jsDate.toISOString().split('T')[0];
