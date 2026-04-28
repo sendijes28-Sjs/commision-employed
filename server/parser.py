@@ -113,8 +113,8 @@ def analyze_document_with_ai(file_paths):
         "X-Title": "Glory Invoice Parser"
     }
     
-    model = "google/gemma-4-27b-it:free"
-    
+    model = "google/gemma-4-31b-it:free"
+
     content: list[dict[str, Any]] = [
         {
             "type": "text",
