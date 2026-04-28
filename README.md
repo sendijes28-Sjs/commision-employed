@@ -1,65 +1,136 @@
 # Glory Commission System
 
-Sistem manajemen komisi dan operasional internal untuk **PT. Aneka Delapan Dekorasi**. Aplikasi ini dirancang untuk memantau kinerja sales, memvalidasi _invoice_, serta dan mengelola laporan pencairan komisi (_payout_) karyawan secara *real-time*.
+**Glory Commission System** adalah sistem manajemen komisi dan operasional internal yang dikembangkan untuk **PT. Aneka Delapan Dekorasi**.
+Aplikasi ini membantu perusahaan dalam mengelola proses invoice, validasi transaksi, serta perhitungan dan pencairan komisi karyawan secara terstruktur dan real-time.
 
-## 🚀 Fitur Utama
+Dirancang untuk mendukung kebutuhan operasional harian, sistem ini mempermudah monitoring performa sales, mempercepat proses validasi, dan meningkatkan transparansi data komisi pada setiap tim.
 
-- **Role-Based Access Control (RBAC):** Akses spesifik berdasarkan peran pengguna (Super Admin, Admin, User).
-- **Manajemen Invoice:** Pengajuan invoice dengan pelacakan status konfirmasi secara langsung.
-- **Review Queue (Validasi):** Pengecekan silang otomatis terhadap invoice untuk meminimalisasi kesalahan.
-- **Laporan Komisi & Payout:** Dashboard komprehensif untuk pelacakan komisi yang belum dicairkan serta riwayat pencairan, mendukung transparansi finansial untuk tiap tim.
-- **Pengelolaan Harga:** Manajerial daftar produk (_Product Prices_) khusus untuk tingkatan admin.
-- **Glassmorphism UI:** Antarmuka responsif dan estetis, terinspirasi dari gaya desain Apple/Notion yang premium.
+---
 
-## 🛠 Tech Stack
+## Fitur Utama
 
-**Front-end:**
-- **Framework:** React 18 / Vite 
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS v4, Vanilla CSS (Glassmorphism), Lucide React Icons
-- **State/Routing:** React Router v7
+### Role-Based Access Control (RBAC)
 
-**Back-end:**
-- **Runtime / Framework:** Node.js / Express.js
-- **Database:** SQLite (Better-SQLite3)
-- **Security & Uploads:** JWT Authentication, Bcrypt (Password Hashing), Multer (File Uploads)
+Sistem akses berdasarkan peran pengguna untuk memastikan setiap user hanya dapat mengakses fitur sesuai kewenangannya:
 
-## 📁 Struktur Folder
+- **Super Admin**
+- **Admin**
+- **User**
 
-- `src/`: Berisi kode antarmuka (_Frontend_) berbasis React.
-  - `app/components/`: Komponen antarmuka yang dapat digunakan kembali (termasuk *Sidebar* dan *Glassmorphism card*).
-  - `app/pages/`: File rendering level halaman sesuai jalur di Router.
-  - `app/context/`: Konteks global seperti *AuthContext* untuk sesi.
-- `server/`: Berisi kode latar belakang (_Backend_ / REST API) termasuk model *database* dan *endpoint*.
+### Manajemen Invoice
 
-## ⚙️ Persyaratan Sistem & Instalasi
+Pengguna dapat mengajukan dan memantau invoice dengan status yang diperbarui secara real-time, sehingga proses pelacakan transaksi menjadi lebih mudah dan transparan.
 
-Pastikan **Node.js** terinstal pada perangkat Anda.
+### Review Queue
 
-1. **Clone repository ini:**
-   ```bash
-   git clone (https://github.com/apawardhana/commision-employe.git)
-   cd Commision-Employee
-   ```
+Menyediakan alur validasi invoice untuk membantu proses pengecekan data sebelum transaksi diproses lebih lanjut.
 
-2. **Instalasi dependencies:**
-   ```bash
-   npm install
-   ```
+### Laporan Komisi & Payout
 
-3. **Inisialisasi Database:**
-   Pastikan Anda sudah memiliki master struktur database (biasanya akan dibentuk otomatis oleh skrip di sisi server saat pertama kali jalan).
+Menampilkan data komisi yang belum dicairkan, riwayat payout, serta ringkasan komisi untuk membantu proses monitoring keuangan secara lebih akurat.
 
-4. **Menjalankan Sistem Secara Lokal:**
-   Gunakan skrip _concurrently_ agar backend dan frontend berjalan bersamaan.
-   ```bash
-   npm run dev:full
-   ```
-   *Frontend akan berjalan di port `3000` dan Backend/API akan berjalan di port `4000`.*
+### Pengelolaan Harga Produk
 
-## 👥 Sistem Peran (Roles)
+Admin dapat mengelola data harga produk yang digunakan sebagai dasar perhitungan komisi.
 
-Setiap akun memiliki hierarki sebagai berikut:
-1. **Super Admin**: Memiliki akses tertinggi, meliputi pengaturan sistem, manipulasi data pengguna, revisi invoice, penyetujuan harga produk, serta eksekusi absensi/keuangan tingkat lanjutan.
-2. **Admin**: Mengelola validasi harian _Review Queue_, mengurus daftar *invoice*, dan mengatur _Pricing_. 
-3. **User**: Anggota tim (Sales / Karyawan). Hanya dapat melihat statistik kinerjanya sendiri, melihat daftar *invoice*-nya sendiri, dan merangkum jumlah riwayat komisinya secara isolatif (*Isolasi Data*).
+### Modern Responsive Interface
+
+Antarmuka dirancang responsif dengan pendekatan visual modern menggunakan komponen yang konsisten, ringan, dan nyaman digunakan pada berbagai perangkat.
+
+---
+
+## Tech Stack
+
+### Frontend
+
+- **React 18** + **Vite**
+- **TypeScript**
+- **Tailwind CSS**
+- **Lucide React**
+- **React Router**
+
+### Backend
+
+- **Node.js**
+- **Express.js**
+- **SQLite** (_better-sqlite3_)
+- **JWT Authentication**
+- **Bcrypt**
+- **Multer**
+
+---
+
+## Struktur Project
+
+### Frontend
+
+Folder `src/` berisi seluruh source code antarmuka berbasis React:
+
+- `app/components/` → komponen reusable seperti sidebar, cards, dan layout
+- `app/pages/` → halaman utama aplikasi
+- `app/context/` → global state seperti autentikasi user
+
+### Backend
+
+Folder `server/` berisi REST API, database handling, serta proses autentikasi dan pengolahan data.
+
+---
+
+## Instalasi & Menjalankan Project
+
+Pastikan **Node.js** sudah terinstal.
+
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/apawardhana/commision-employe.git
+cd Commision-Employee
+```
+
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Jalankan Aplikasi
+
+```bash
+npm run dev:full
+```
+
+Frontend berjalan di:
+
+```bash
+http://localhost:3000
+```
+
+Backend berjalan di:
+
+```bash
+http://localhost:4000
+```
+
+---
+
+## Role Pengguna
+
+### Super Admin
+
+Memiliki akses penuh terhadap seluruh sistem, termasuk pengelolaan user, validasi data, pengaturan harga, serta kontrol operasional tingkat lanjut.
+
+### Admin
+
+Bertanggung jawab terhadap validasi invoice, pengelolaan daftar transaksi, serta pengaturan data harga produk.
+
+### User
+
+Dapat mengakses data performa pribadi, melihat invoice miliknya, dan memantau riwayat komisi secara mandiri.
+
+---
+
+## Tujuan Pengembangan
+
+Glory Commission System dibuat untuk membantu proses operasional perusahaan menjadi lebih efisien melalui sistem yang terpusat, transparan, dan mudah digunakan.
+
+Dengan sistem ini, proses pengelolaan komisi tidak lagi dilakukan secara manual, sehingga risiko kesalahan data dapat dikurangi dan proses bisnis berjalan lebih efektif.
