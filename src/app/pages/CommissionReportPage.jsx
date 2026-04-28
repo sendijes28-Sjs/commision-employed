@@ -1,9 +1,8 @@
  import { useState, useEffect } from "react";
-import { PageHeader } from "../components/PageHeader.jsx";
 import { StatusBadge } from "../components/StatusBadge.jsx";
-import { Download, Calendar, Users, Clock, DollarSign, FileSpreadsheet, TrendingUp, Search, ArrowUpRight, BarChart3, PieChart, Wallet, CreditCard, ChevronRight, Loader2, CheckCircle2, ShieldCheck, Check, X, Upload } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, Search, Wallet, CreditCard, Loader2, X, Upload } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
-import * from "xlsx";
+import * as XLSX from "xlsx";
 import axios from "axios";
 import { toast } from "sonner";
 
