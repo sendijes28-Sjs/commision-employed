@@ -20,7 +20,7 @@ jobs:
           script: |
             cd /var/www/commision-employed
             git pull origin main
-            npm install --production
+            npm install
             npm run build
             pm2 restart commision-api
             echo "Deploy selesai!"
