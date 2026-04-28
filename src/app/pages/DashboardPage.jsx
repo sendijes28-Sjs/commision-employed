@@ -62,7 +62,6 @@ export function DashboardPage() {
         setUnpaidCommission(Math.floor(commSummary.unpaidCommission || 0));
         setPaidCommission(Math.floor(commSummary.paidCommission || 0));
         
-        // Count statuses from full commission data instead of paginated invoices
         const allCommissions = commRes.data?.data || [];
         setPendingCount(allCommissions.filter((c) => c.status.toLowerCase() === 'pending').length);
         setRejectedCount(allCommissions.filter((c) => c.status.toLowerCase() === 'rejected').length);
@@ -71,12 +70,9 @@ export function DashboardPage() {
           setTeamStats(statsData.teamBreakdown);
         }
 
-        // Recent invoices for sidebar activity
         const recentInvoices = invRes.data?.data || [];
         setLatestInvoices(recentInvoices.slice(0, 6));
 
-        // Chart data: use userTimeSeries from stats when available (admin),
-        // otherwise aggregate from all invoices in date range
         if (isAdmin && statsData.userTimeSeries?.length > 0) {
           const salesByDate = {};
           statsData.userTimeSeries.forEach((pts) => {
@@ -88,7 +84,6 @@ export function DashboardPage() {
             sales: salesByDate[d]
           })));
         } else {
-          // For regular users, build chart from their invoices
           const salesByDate = {};
           recentInvoices.forEach((inv) => {
             const d = inv.date?.substring(0, 10);
@@ -138,7 +133,6 @@ export function DashboardPage() {
     } else if (selectedUserId === 'team_User') {
       list = list.filter(u => u.team === 'User');
     } else if (selectedUserId !== 'all') {
-      // filtering by individual user
       list = list.filter(u => u.id.toString() === selectedUserId);
     }
     
@@ -217,21 +211,20 @@ export function DashboardPage() {
     } else {
        const userD = userBreakdown.find(u => u.id.toString() === selectedUserId);
        salesAmt = userD ? Number(userD.total_sales) : 0;
-       targetAmt = 0; // No target for individual
+       targetAmt = 0;
        label = `${userD?.name?.split(" ")[0]}'s Revenue` || "Revenue";
     }
     
     statCards.push({ 
        label: label, 
        value: targetAmt > 0 ? `Rp ${salesAmt.toLocaleString("id-ID")} / ${targetAmt.toLocaleString("id-ID")}` : `Rp ${salesAmt.toLocaleString("id-ID")}`, 
-       progress: targetAmt > 0 ? (salesAmt/targetAmt)*100, 
+       progress: targetAmt > 0 ? (salesAmt / targetAmt) * 100 : undefined,
        icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" 
     });
   } else {
-    // Non-admin shows their team's target
     const myTarget = user?.team === 'Lelang' ? targetLelang : (user?.team === 'User' ? targetUser : 0);
     if (myTarget > 0) {
-      statCards.push({ label: `Team ${user?.team} Target`, value: `Rp ${teamTodaySales.toLocaleString("id-ID")} / ${myTarget.toLocaleString("id-ID")}`, progress: (teamTodaySales/myTarget)*100, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" });
+      statCards.push({ label: `Team ${user?.team} Target`, value: `Rp ${teamTodaySales.toLocaleString("id-ID")} / ${myTarget.toLocaleString("id-ID")}`, progress: (teamTodaySales / myTarget) * 100, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" });
     }
   }
 
@@ -244,7 +237,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-10 max-w-7xl mx-auto">
-      {/* Header — greeting style */}
+      {/* Header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           {getGreeting()}, {user?.name?.split(" ")[0]}
@@ -429,7 +422,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Stat Cards — 5 columns for compactness */}
+      {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {statCards.map((card, idx) => (
           <div key={idx} className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
@@ -463,7 +456,6 @@ export function DashboardPage() {
               </div>
             </div>
 
-            {/* Chart */}
             <div className="h-[280px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={filteredChartData}>
@@ -549,7 +541,6 @@ export function DashboardPage() {
 
         {/* Right column */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          {/* Recent Activity */}
           <div className="bg-slate-900 rounded-xl p-5 text-white shadow-sm flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div>

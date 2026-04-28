@@ -151,7 +151,7 @@ export function ProductPriceListPage() {
 
   const [showImportDetail, setShowImportDetail] = useState(false);
 
-  const openProductModal = (product?: Product) => {
+  const openProductModal = (product) => {
     if (product) {
       setEditingProduct(product);
       setProductForm({ sku: product.sku, name: product.name, bottom_price: String(product.rawPrice) });
@@ -187,7 +187,7 @@ export function ProductPriceListPage() {
     }
   };
 
-  const confirmDeleteProduct = (product: Product) => {
+  const confirmDeleteProduct = (product) => {
     setProductToDelete(product);
   };
 
@@ -217,7 +217,7 @@ export function ProductPriceListPage() {
       const qty = mapping.qtyCol !== -1 ? parsePrice(row[mapping.qtyCol || -1]) || 1 : 1;
       if (mapping.qtyCol !== -1 && qty > 0) price = price / qty;
       price = Math.floor(price);
-      const sku = mapping.skuCol !== -1 ? row[mapping.skuCol]?.trim() || null;
+      const sku = mapping.skuCol !== -1 ? (row[mapping.skuCol]?.trim() || null) : null;
       const itemName = name.trim();
 
       let existingMatch = null;

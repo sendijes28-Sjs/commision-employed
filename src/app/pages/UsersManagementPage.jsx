@@ -48,7 +48,7 @@ export function UsersManagementPage() {
 
   useEffect(() => { fetchUsers(); }, []);
 
-  const openModal = (user?: User) => {
+  const openModal = (user) => {
     if (user) {
       setEditingUserId(user.id);
       setValue("name", user.name);
@@ -66,7 +66,7 @@ export function UsersManagementPage() {
 
   const closeModal = () => { setIsModalOpen(false); reset(); setEditingUserId(null); };
 
-  const onSubmit = async (data: UserFormData) => {
+  const onSubmit = async (data) => {
     try {
       if (editingUserId) {
         const payload = data.password ? data : { ...data, password };
@@ -99,7 +99,7 @@ export function UsersManagementPage() {
     }
   };
 
-  const toggleStatus = async (user: User) => {
+  const toggleStatus = async (user) => {
     try {
       const newStatus = user.status === "Active" ? "Inactive" : "Active";
       await axios.patch(`${API_URL}/users/${user.id}/status`, { status: newStatus });

@@ -46,7 +46,7 @@ export function CreateInvoicePage() {
 
   const watchedItems = watch("items");
 
-  const findProductMatch = (inputName, productList: Product[]) => {
+  const findProductMatch = (inputName, productList) => {
     if (!inputName) return null;
     const normInput = normalizeString(inputName);
     
@@ -122,7 +122,7 @@ export function CreateInvoicePage() {
     }
   }, [productMap, watch, setValue]);
 
-  const onDrop = useCallback((acceptedFiles[]) => {
+  const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) handleFileUpload(acceptedFiles);
   }, []);
 
