@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Save, User, ShieldCheck, Loader2, Settings2, Percent, Globe, Bell, Lock, LogOut, Clock, KeyRound, Activity, Sparkles, BadgeCheck, ShieldAlert, LayoutGrid, AlertTriangle, Database, Upload, FileSpreadsheet, Trash2, Package, HelpCircle, TrendingUp } from "lucide-react";
-import * from "xlsx";
+import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { PageHeader } from "../components/PageHeader.jsx";
 import axios from "axios";
@@ -458,7 +458,7 @@ export function SettingsPage() {
                                     const data = new Uint8Array(event.target?.result);
                                     const workbook = XLSX.read(data, { type: 'array' });
                                     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                                    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[][];
+                                    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                                     
                                     const grouped = {};
 
@@ -495,10 +495,7 @@ export function SettingsPage() {
                                       return parseFloat(cleaned) || 0;
                                     };
 
-
-
-
-                                     const isInvNum = (val: { toString: () => string; }) => {
+                                    const isInvNum = (val) => {
                                        if (!val) return false;
                                        const s = val.toString().trim();
                                        if (s.length < 5) return false;
