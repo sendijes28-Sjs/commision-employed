@@ -1,9 +1,8 @@
 module.exports = {
   apps: [{
     name: 'commision-api',
-    script: 'server/index.ts',
-    interpreter: 'node',
-    interpreterArgs: '--import tsx/esm',
+    script: 'node_modules/.bin/tsx',
+    args: 'server/index.ts',
     cwd: '/var/www/commision-employed',
     autorestart: true,
     watch: false,
